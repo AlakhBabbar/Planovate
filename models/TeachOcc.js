@@ -27,11 +27,11 @@ const teachOccSchema = new mongoose.Schema({
     },
     course: {
         type: String,
-        required: true,
+        required: false,
     },
     room: {
         type: String,
-        required: true,
+        required: false,
     }
 });
 

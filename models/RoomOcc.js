@@ -5,6 +5,18 @@ const roomOccSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    class: {
+        type: String,
+        required: true,
+    },
+    branch: {
+        type: String,
+        required: true,
+    },
+    batch: {
+        type: String,
+        required: false,
+    },
     day: {
         type: String,
         required: true,
@@ -14,10 +26,6 @@ const roomOccSchema = new mongoose.Schema({
         required: true,
     },
     course: {
-        type: String,
-        required: true,
-    },
-    class: {
         type: String,
         required: true,
     },
