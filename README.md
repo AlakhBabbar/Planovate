@@ -1,4 +1,4 @@
-##Steps to Run:-
+*Steps to Run:-*
 1. Clone this repo
 2. Change the directory to backend
 3. run "npm install"
