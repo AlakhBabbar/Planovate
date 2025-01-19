@@ -1,13 +1,14 @@
-*Steps to Run:-*
-1. Clone this repo
-2. Change the directory to backend
-3. run "npm install"
-4. Install MongoDB and mongosh
-5. Copy and paste the Mongodb server link in db.js. (Go to backend -> db -> db.js -> paste the link at the place of "process.env.mongo_url")
-6. Run "nodemon index.js"
-7. change the directory to frontend
-8. run "npm install"
-9. Run "npm start"
-10. Copy and paste the link in your browser
+## Steps to Run
 
-Note: This is still under development.
+1. Clone this repository.
+2. Navigate to the `backend` directory.
+3. Run `npm install` to install backend dependencies.
+4. Install MongoDB and `mongosh` if not already installed.
+5. Open `backend/db/db.js` and replace `process.env.mongo_url` with your MongoDB server link.
+6. Start the backend server by running `nodemon index.js`.
+7. Change to the `frontend` directory.
+8. Run `npm install` to install frontend dependencies.
+9. Start the frontend application by running `npm start`.
+10. Open your browser and paste the provided link.
+
+**Note:** This project is still under development.
