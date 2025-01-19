@@ -238,6 +238,7 @@ const TimetableManagement = () => {
                               if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
                               inputRefs.current[timeIndex][dayIndex][cellIndex].teacher = el;
                             }}
+                            placeholder='Teacher'
                           />
                           <datalist id={`teachers-${timeIndex}-${dayIndex}-${cellIndex}`}>
                             {teachers.map((teacher) => (
@@ -258,6 +259,7 @@ const TimetableManagement = () => {
                               if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
                               inputRefs.current[timeIndex][dayIndex][cellIndex].subject = el;
                             }}
+                            placeholder='Subject'
                           />
                           <datalist id={`subjects-${timeIndex}-${dayIndex}-${cellIndex}`}>
                             {subjects.map((subject) => (
@@ -278,6 +280,7 @@ const TimetableManagement = () => {
                               if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
                               inputRefs.current[timeIndex][dayIndex][cellIndex].room = el;
                             }}
+                            placeholder='Room'
                           />
                           <datalist id={`rooms-${timeIndex}-${dayIndex}-${cellIndex}`}>
                             {rooms.map((room) => (
