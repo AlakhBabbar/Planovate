@@ -5,15 +5,19 @@ const teacherSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    ID: {
+        type: String,
+        required: true,
+    },
+    faculty: {
+        type: String,
+        required: true,
+    },
     department: {
         type: Number,
         required: true,
     },
-    course: {
-        type: Array,
-        required: true,
-    }
 });
 
-const Teacher = mongoose.model("Teacher", teacherSchema);
-export default Teacher;
+const teacher = mongoose.model("teacher", teacherSchema);
+export default teacher;

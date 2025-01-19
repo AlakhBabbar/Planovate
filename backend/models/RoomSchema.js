@@ -5,6 +5,10 @@ const roomSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    ID: {
+        type: String,
+        required: true,
+    },
     capacity: {
         type: Number,
         required: true,
@@ -15,6 +19,6 @@ const roomSchema = new mongoose.Schema({
     }
 });
 
-const Room = mongoose.model('Room', roomSchema);
+const room = mongoose.model('room', roomSchema);
 
-export default Room;
+export default room;

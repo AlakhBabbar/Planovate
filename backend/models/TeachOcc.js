@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
-const roomOccSchema = new mongoose.Schema({
-    room: {
+const teachOccSchema = new mongoose.Schema({
+    teacher: {
         type: String,
         required: true,
     },
@@ -27,13 +27,13 @@ const roomOccSchema = new mongoose.Schema({
     },
     course: {
         type: String,
-        required: true,
+        required: false,
     },
-    teacher: {
+    room: {
         type: String,
-        required: true,
+        required: false,
     }
 });
 
-const RoomOcc = mongoose.model("RoomOcc", roomOccSchema);
-export default RoomOcc;
+const teachOcc = mongoose.model("teachOcc", teachOccSchema);
+export default teachOcc;
