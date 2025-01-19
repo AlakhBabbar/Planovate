@@ -7,6 +7,8 @@
 /backend/node_modules/
 /.vscode
 
+/DEI/Practice/node_modules/
+/DEI/backend/node_modules/
 # testing
 /coverage
 .env

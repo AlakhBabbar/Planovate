@@ -1,0 +1,28 @@
+/*!***************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[13].oneOf[2].use[1]!./node_modules/next/dist/build/webpack/loaders/next-font-loader/index.js??ruleSet[1].rules[13].oneOf[2].use[2]!./node_modules/next/font/google/target.css?{"path":"app\\layout.js","import":"Geist","arguments":[{"variable":"--font-geist-sans","subsets":["latin"]}],"variableName":"geistSans"} ***!
+  \***************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+@font-face {
+  font-family: 'Geist Fallback';
+  src: local("Arial");
+  ascent-override:95.94%;
+  descent-override:28.16%;
+  line-gap-override:0.00%;
+  size-adjust:104.76%;
+}@font-face {font-family: 'Geist Fallback Fallback';src: local("Arial");ascent-override: 95.94%;descent-override: 28.16%;line-gap-override: 0.00%;size-adjust: 104.76%
+}.__className_f27602 {font-family: 'Geist Fallback', 'Geist Fallback Fallback';font-style: normal
+}.__variable_f27602 {--font-geist-sans: 'Geist Fallback', 'Geist Fallback Fallback'
+}
+/*!********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[13].oneOf[2].use[1]!./node_modules/next/dist/build/webpack/loaders/next-font-loader/index.js??ruleSet[1].rules[13].oneOf[2].use[2]!./node_modules/next/font/google/target.css?{"path":"app\\layout.js","import":"Geist_Mono","arguments":[{"variable":"--font-geist-mono","subsets":["latin"]}],"variableName":"geistMono"} ***!
+  \********************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************************/
+@font-face {
+  font-family: 'Geist Mono Fallback';
+  src: local("Arial");
+  ascent-override:74.67%;
+  descent-override:21.92%;
+  line-gap-override:0.00%;
+  size-adjust:134.59%;
+}@font-face {font-family: 'Geist Mono Fallback Fallback';src: local("Arial");ascent-override: 74.67%;descent-override: 21.92%;line-gap-override: 0.00%;size-adjust: 134.59%
+}.__className_22812c {font-family: 'Geist Mono Fallback', 'Geist Mono Fallback Fallback';font-style: normal
+}.__variable_22812c {--font-geist-mono: 'Geist Mono Fallback', 'Geist Mono Fallback Fallback'
+}
