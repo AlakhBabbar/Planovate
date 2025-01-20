@@ -24,6 +24,30 @@ app.post("/check-clash", async (req, res) => {
         });
 });
 
+app.post("/faculty", async (req, res) => {
+    createTeacher(req.body).then((teacher)=>{
+        res.json(teacher);
+    }).catch((message)=>{
+        res.status(500).json({error: message});
+    });
+});
+
+app.get("/faculty", async (req, res) => {
+    teacher.find().then((teachers)=>{
+        res.json(teachers);
+    }).catch((message)=>{
+        res.status(500).json({error: message});
+    });
+});
+
+app.delete("/faculty/:ID", async (req, res) => {
+    deleteTeacher(req.params).then((message)=>{
+        res.json(message);
+    }).catch((message)=>{
+        res.status(500).json({error: message});
+    });
+});
+
 app.listen(port, () => {
   console.log(`Listening on port ${port}`);
 });

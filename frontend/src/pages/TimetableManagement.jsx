@@ -176,10 +176,9 @@ const TimetableManagement = () => {
     <div className="min-h-screen bg-white">
       <header className="no-print">
         <nav className="flex justify-end space-x-6 p-4 bg-gray-500 text-white">
-          <Link to="/teachers" className="hover:text-gray-400">Teacher List</Link>
           <Link to="/rooms" className="hover:text-gray-400">Room List</Link>
           <Link to="/courses" className="hover:text-gray-400">Course</Link>
-          <Link to="/faculty" className="hover:text-gray-400">Faculty</Link>
+          <Link to="/teacher" className="hover:text-gray-400">teacher</Link>
         </nav>
       </header>
       <div className="container mx-auto p-6">
