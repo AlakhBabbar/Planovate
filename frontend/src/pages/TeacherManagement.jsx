@@ -1,7 +1,7 @@
 // filepath: /c:/Users/anish/Desktop/DEI/Practice/pages/TeacherManagement.jsx
 import React, { useState, useEffect } from 'react';
 
-const teacherManagement = () => {
+const TeacherManagement = () => {
   const [teachers, setteachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newteacher, setNewteacher] = useState({ teacher_id: '', name: '', email: '', department: '' });
@@ -125,4 +125,4 @@ const teacherManagement = () => {
   );
 };
 
-export default teacherManagement;
+export default TeacherManagement;
