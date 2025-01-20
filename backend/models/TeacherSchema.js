@@ -14,6 +14,10 @@ const teacherSchema = new mongoose.Schema({
         required: true,
     },
     department: {
+        type: String,
+        required: true,
+    },
+    unid:{
         type: Number,
         required: true,
     },

@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 const teachers = Array.from({ length: 50 }, (_, i) => `T${i + 1}`);
 const rooms = Array.from({ length: 50 }, (_, i) => `R${i + 101}`);
 const subjects = ['Math', 'Sci', 'Eng', 'Hist', 'Art'];
-const times = ['7:00 - 8:00','8:00 - 9:00','9:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '13:00 - 14:00', '14:00 - 15:00','16:00 - 17:00','17:00 - 18:00'];
+const times = ['7:00 - 8:00', '8:00 - 9:00', '9:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '13:00 - 14:00', '14:00 - 15:00', '16:00 - 17:00', '17:00 - 18:00'];
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const TimetableManagement = () => {
@@ -41,7 +41,7 @@ const TimetableManagement = () => {
   };
 
   const handleClassInfoChange = (tableId, key, value) => {
-    setTables(tables.map(table => 
+    setTables(tables.map(table =>
       table.id === tableId ? { ...table, classInfo: { ...table.classInfo, [key]: value } } : table
     ));
   };
@@ -61,12 +61,13 @@ const TimetableManagement = () => {
   const handleKeyDown = (event, tableId, dayIndex, timeIndex, cellIndex, key) => {
     if (event.key === 'Enter') {
       if (key === 'teacher') {
-        handleBlur(tableId, dayIndex, timeIndex, cellIndex);
+        handleBlurTeacher(tableId, dayIndex, timeIndex, cellIndex);
       }
+      moveToNextInput(dayIndex, timeIndex, cellIndex, key);
     }
   };
 
-  const handleBlur = async (tableId, dayIndex, timeIndex, cellIndex) => {
+  const handleBlurTeacher = async (tableId, dayIndex, timeIndex, cellIndex) => {
     const table = tables.find(table => table.id === tableId);
     const slot = table.timetable[timeIndex][dayIndex][cellIndex];
     const requestData = {
@@ -79,7 +80,7 @@ const TimetableManagement = () => {
     };
 
     try {
-      const response = await fetch('/check-clash', {
+      const response = await fetch('teacher/clash', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData),
@@ -178,7 +179,7 @@ const TimetableManagement = () => {
         <nav className="flex justify-end space-x-6 p-4 bg-gray-500 text-white">
           <Link to="/rooms" className="hover:text-gray-400">Room List</Link>
           <Link to="/courses" className="hover:text-gray-400">Course</Link>
-          <Link to="/teacher" className="hover:text-gray-400">teacher</Link>
+          <Link to="/teacher" className="hover:text-gray-400">Teacher List</Link>
         </nav>
       </header>
       <div className="container mx-auto p-6">

@@ -1,128 +1,227 @@
-// filepath: /c:/Users/anish/Desktop/DEI/Practice/pages/TeacherManagement.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
-const TeacherManagement = () => {
-  const [teachers, setteachers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [newteacher, setNewteacher] = useState({ teacher_id: '', name: '', email: '', department: '' });
+function TeacherManagement() {
+  const [departments, setDepartments] = useState([
+    { id: 1, name: '', rows: [{ id: Date.now(), teacherId: '', name: '', faculty: '', isAdded: false }] }
+  ]);
 
-  useEffect(() => {
-    fetchteachers();
-  }, []);
-
-  const fetchteachers = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/teacher');
-      if (!response.ok) {
-        throw new Error('Failed to fetch teachers');
-      }
-      const data = await response.json();
-      setteachers(data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error fetching teachers:', error);
-      setLoading(false);
-    }
+  const handleInputChange = (deptId, rowId, field, value) => {
+    setDepartments((prev) =>
+      prev.map((dept) =>
+        dept.id === deptId
+          ? {
+              ...dept,
+              rows: dept.rows.map((row) =>
+                row.id === rowId ? { ...row, [field]: value } : row
+              )
+            }
+          : dept
+      )
+    );
   };
 
-  const handleAddteacher = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/teacher', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newteacher),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to add teacher');
-      }
-      const data = await response.json();
-      setteachers([...teachers, data]);
-      setNewteacher({ teacher_id: '', name: '', email: '', department: '' });
-    } catch (error) {
-      console.error('Error adding teacher:', error);
-    }
+  const handleAddRow = (deptId) => {
+    setDepartments((prev) =>
+      prev.map((dept) =>
+        dept.id === deptId
+          ? {
+              ...dept,
+              rows: [...dept.rows, { id: Date.now(), teacherId: '', name: '', faculty: '', isAdded: false }]
+            }
+          : dept
+      )
+    );
   };
 
-  const handleDeleteteacher = async (ID) => {
-    try {
-      const response = await fetch(`http://localhost:5000/teacher/${ID}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        throw new Error('Failed to delete teacher');
-      }
-      setteachers(teachers.filter((teacher) => teacher.ID !== ID));
-    } catch (error) {
-      console.error('Error deleting teacher:', error);
-    }
+  const handleDeleteRow = (deptId, rowId) => {
+    setDepartments((prev) =>
+      prev.map((dept) =>
+        dept.id === deptId
+          ? {
+              ...dept,
+              rows: dept.rows.filter((row) => row.id !== rowId)
+            }
+          : dept
+      )
+    );
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  const handleAddDepartment = () => {
+    setDepartments((prev) => [
+      ...prev,
+      { id: Date.now(), name: '', rows: [{ id: Date.now(), teacherId: '', name: '', faculty: '', isAdded: false }] }
+    ]);
+  };
+
+  const handleSubmit = (deptId, rowId) => {
+    const department = departments.find((dept) => dept.id === deptId);
+    const row = department.rows.find((row) => row.id === rowId);
+  
+    // Construct the data object to include the required fields
+    const dataToSend = {
+      unid: rowId,  
+      ID: row.teacherId,
+      name: row.name,
+      faculty: row.faculty,
+      department: department.name,
+    };
+  
+    console.log("Data being sent to backend:", dataToSend);
+  
+    fetch('/teacher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dataToSend),
+    }).then((res) => {
+      if (res.ok) {
+        setDepartments((prev) =>
+          prev.map((dept) =>
+            dept.id === deptId
+              ? {
+                  ...dept,
+                  rows: dept.rows.map((r) =>
+                    r.id === rowId ? { ...r, isAdded: true } : r
+                  ),
+                }
+              : dept
+          )
+        );
+      }
+    });
+  };
+
+  const handleUpdate = (deptId, rowId) => {
+    const department = departments.find((dept) => dept.id === deptId);
+    const row = department.rows.find((row) => row.id === rowId);
+
+    // Construct the data object to include the required fields
+    const dataToSend = {
+        unid: rowId,
+        ID: row.teacherId,
+        name: row.name,
+        faculty: row.faculty,
+        department: department.name,
+      };
+
+    console.log(dataToSend);
+    fetch(`/teacher/${rowId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dataToSend)
+    }).then((res) => {
+      if (res.ok) {
+        alert('Data updated successfully');
+      }
+    });
+  };
 
   return (
-    <div>
-      {/* <h1 className="text-2xl font-bold mb-4">teacher Management</h1> */}
-      <div className="mb-4 my-6">
-        <input
-          type="text"
-          placeholder="teacher ID"
-          value={newteacher.teacher_id}
-          onChange={(e) => setNewteacher({ ...newteacher, teacher_id: e.target.value })}
-          className="border p-2 mr-2"
-        />
-        <input
-          type="text"
-          placeholder="Name"
-          value={newteacher.name}
-          onChange={(e) => setNewteacher({ ...newteacher, name: e.target.value })}
-          className="border p-2 mr-2"
-        />
-        <input
-          type="email"
-          placeholder="Email"
-          value={newteacher.email}
-          onChange={(e) => setNewteacher({ ...newteacher, email: e.target.value })}
-          className="border p-2 mr-2"
-        />
-        <input
-          type="text"
-          placeholder="Department"
-          value={newteacher.department}
-          onChange={(e) => setNewteacher({ ...newteacher, department: e.target.value })}
-          className="border p-2 mr-2"
-        />
-        <button onClick={handleAddteacher} className="bg-blue-500 text-white p-2 rounded">Add teacher</button>
-      </div>
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-200">
-            <th className="border p-2">teacher ID</th>
-            <th className="border p-2">Name</th>
-            <th className="border p-2">Email</th>
-            <th className="border p-2">Department</th>
-            <th className="border p-2">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {teachers.map((teacher) => (
-            <tr key={teacher._id}>
-              <td className="border p-2">{teacher.teacher_id}</td>
-              <td className="border p-2">{teacher.teacher_Name}</td>
-              <td className="border p-2">{teacher.teacher_Email}</td>
-              <td className="border p-2">{teacher.department}</td>
-              <td className="border p-2">
-                <button onClick={() => handleDeleteteacher(teacher._id)} className="bg-red-500 text-white p-2 rounded">Delete</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-4">Teacher Load</h1>
+      {departments.map((department) => (
+        <div key={department.id} className="mb-8 border p-4">
+          <div className="mb-4">
+            <label className="block mb-2 font-medium">Department</label>
+            <input
+              type="text"
+              className="border p-2 w-full"
+              value={department.name}
+              onChange={(e) =>
+                setDepartments((prev) =>
+                  prev.map((dept) =>
+                    dept.id === department.id ? { ...dept, name: e.target.value } : dept
+                  )
+                )
+              }
+            />
+          </div>
+          <table className="table-auto w-full mb-4">
+            <thead>
+              <tr>
+                <th className="border px-4 py-2">Teacher ID</th>
+                <th className="border px-4 py-2">Name</th>
+                <th className="border px-4 py-2">Faculty</th>
+                <th className="border px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {department.rows.map((row) => (
+                <tr key={row.id}>
+                  <td className="border px-4 py-2">
+                    <input
+                      type="text"
+                      className="w-full border p-2"
+                      value={row.teacherId}
+                      onChange={(e) =>
+                        handleInputChange(department.id, row.id, 'teacherId', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td className="border px-4 py-2">
+                    <input
+                      type="text"
+                      className="w-full border p-2"
+                      value={row.name}
+                      onChange={(e) =>
+                        handleInputChange(department.id, row.id, 'name', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td className="border px-4 py-2">
+                    <input
+                      type="text"
+                      className="w-full border p-2"
+                      value={row.faculty}
+                      onChange={(e) =>
+                        handleInputChange(department.id, row.id, 'faculty', e.target.value)
+                      }
+                    />
+                  </td>
+                  <td className="border px-4 py-2 text-center">
+                    {row.isAdded ? (
+                      <button
+                        className="bg-yellow-500 text-white px-4 py-2 mr-2"
+                        onClick={() => handleUpdate(department.id, row.id)}
+                      >
+                        Update
+                      </button>
+                    ) : (
+                      <button
+                        className="bg-blue-500 text-white px-4 py-2 mr-2"
+                        onClick={() => handleSubmit(department.id, row.id)}
+                      >
+                        Add
+                      </button>
+                    )}
+                    {department.rows.length > 1 && (
+                      <button
+                        className="bg-red-500 text-white px-4 py-2"
+                        onClick={() => handleDeleteRow(department.id, row.id)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button
+            className="bg-green-500 text-white px-4 py-2"
+            onClick={() => handleAddRow(department.id)}
+          >
+            Add Row
+          </button>
+        </div>
+      ))}
+      <button
+        className="bg-gray-500 text-white px-4 py-2"
+        onClick={handleAddDepartment}
+      >
+        Add Department
+      </button>
     </div>
   );
-};
+}
 
 export default TeacherManagement;
