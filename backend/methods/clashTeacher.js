@@ -1,7 +1,7 @@
 import teachOcc from "../models/TeachOcc.js";
 
 // Checking teacher occupation and updating if necessary
-const clash = async (json) => {
+const clashTeacher = async (json) => {
     try {
         const { teacher, class: classs, branch, day, time, batch, action } = json;
 
@@ -41,4 +41,4 @@ const clash = async (json) => {
     }
 };
 
-export { clash };
+export { clashTeacher };
