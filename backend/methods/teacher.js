@@ -12,7 +12,7 @@ export const createTeacher = async (json) => {
         // Check if the teacher already exists
         const result = await Teacher.findOne({ ID });
         if (result) {
-            return { success: false, error: "Teacher already exists with this ID." };
+            return { success: false, message: "Teacher already exists with this ID." };
         }
 
         // Save the teacher
@@ -20,12 +20,12 @@ export const createTeacher = async (json) => {
         await newTeacher.save();
         return { success: true, message: "Teacher saved successfully." };
     } catch (err) {
-        return { success: false, error: `Error creating teacher: ${err.message}` };
+        return { success: false, message: `Error creating teacher: ${err.message}` };
     }
 };
 
 
-export const getTeachers = async () => {
+export const getTeachers = async (req, res) => {
     try {
         const teachers = await Teacher.find();
         return teachers;

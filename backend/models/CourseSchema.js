@@ -20,7 +20,19 @@ const courseSchema = new mongoose.Schema({
     teachers:{
         type: [String],
         required: true,
-    }
+    },
+    faculty:{
+        type: String,
+        required: true,
+    },
+    semester:{
+        type: String,
+        required: true,
+    },
+    department:{
+        type: String,
+        required: true,
+    },
 });
 
 const course = mongoose.model("course", courseSchema);

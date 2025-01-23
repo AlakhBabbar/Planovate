@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 
-const teachers = Array.from({ length: 50 }, (_, i) => `T${i + 1}`);
 const rooms = Array.from({ length: 50 }, (_, i) => `R${i + 101}`);
 const subjects = ['Math', 'Sci', 'Eng', 'Hist', 'Art'];
 const times = ['7:00 - 8:00', '8:00 - 9:00', '9:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '13:00 - 14:00', '14:00 - 15:00', '16:00 - 17:00', '17:00 - 18:00'];
@@ -17,6 +16,11 @@ const TimetableManagement = () => {
   ]);
   const [activeTableId, setActiveTableId] = useState(1);
   const inputRefs = useRef([]);
+  const [teachers, setTeachers] = useState([]);
+
+  useEffect(() => {
+    fetchTeachers();
+  }, []);
 
   const addNewTable = () => {
     const newTableId = tables.length ? tables[tables.length - 1].id + 1 : 1;
@@ -40,6 +44,21 @@ const TimetableManagement = () => {
     }
   };
 
+  const fetchTeachers = async () => {
+    try {
+      const response = await fetch('/teacher');
+      if (!response.ok) {
+        console.error('Failed to fetch teachers');
+        return;
+      }
+      const data = await response.json();
+      const teacherIDs = data.map(teacher => teacher.ID); // Extract only the ID values
+      setTeachers(teacherIDs); // Set the IDs in the state
+    } catch (error) {
+      console.error('Error fetching teachers:', error);
+    }
+  };
+
   const handleClassInfoChange = (tableId, key, value) => {
     setTables(tables.map(table =>
       table.id === tableId ? { ...table, classInfo: { ...table.classInfo, [key]: value } } : table
@@ -56,15 +75,6 @@ const TimetableManagement = () => {
     const updatedTimetable = [...table.timetable];
     updatedTimetable[timeIndex][dayIndex][cellIndex][key] = value;
     setTables(tables.map(t => t.id === tableId ? { ...t, timetable: updatedTimetable } : t));
-  };
-
-  const handleKeyDown = (event, tableId, dayIndex, timeIndex, cellIndex, key) => {
-    if (event.key === 'Enter') {
-      if (key === 'teacher') {
-        handleBlurTeacher(tableId, dayIndex, timeIndex, cellIndex);
-      }
-      moveToNextInput(dayIndex, timeIndex, cellIndex, key);
-    }
   };
 
   const handleBlurTeacher = async (tableId, dayIndex, timeIndex, cellIndex) => {
@@ -103,12 +113,14 @@ const TimetableManagement = () => {
     }
   };
 
-  const moveToNextInput = (dayIndex, timeIndex, cellIndex, key) => {
-    if (key === 'teacher') {
+  const moveToNextInput = (event, tableId, dayIndex, timeIndex, cellIndex, key) => {
+    if (event.key === 'Enter'){
+    if (key === 'subject') {
       if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][dayIndex] && inputRefs.current[timeIndex][dayIndex][cellIndex]) {
-        inputRefs.current[timeIndex][dayIndex][cellIndex].subject.focus();
+        inputRefs.current[timeIndex][dayIndex][cellIndex].teacher.focus();
       }
-    } else if (key === 'subject') {
+    } else if (key === 'teacher') {
+      handleBlurTeacher(tableId, dayIndex, timeIndex, cellIndex);
       if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][dayIndex] && inputRefs.current[timeIndex][dayIndex][cellIndex]) {
         inputRefs.current[timeIndex][dayIndex][cellIndex].room.focus();
       }
@@ -118,13 +130,14 @@ const TimetableManagement = () => {
       const nextDayIndex = dayIndex + 1;
 
       if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][dayIndex] && inputRefs.current[timeIndex][dayIndex][nextCellIndex]) {
-        inputRefs.current[timeIndex][dayIndex][nextCellIndex].teacher.focus();
+        inputRefs.current[timeIndex][dayIndex][nextCellIndex].subject.focus();
       } else if (inputRefs.current[nextTimeIndex] && inputRefs.current[nextTimeIndex][dayIndex] && inputRefs.current[nextTimeIndex][dayIndex][0]) {
-        inputRefs.current[nextTimeIndex][dayIndex][0].teacher.focus();
+        inputRefs.current[nextTimeIndex][dayIndex][0].subject.focus();
       } else if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][nextDayIndex] && inputRefs.current[timeIndex][nextDayIndex][0]) {
-        inputRefs.current[timeIndex][nextDayIndex][0].teacher.focus();
+        inputRefs.current[timeIndex][nextDayIndex][0].subject.focus();
       }
     }
+  }
   };
 
   const handleSplitCell = (tableId, dayIndex, timeIndex) => {
@@ -227,31 +240,10 @@ const TimetableManagement = () => {
                       <div key={cellIndex} className="mb-2">
                         <div className="relative">
                           <input
-                            list={`teachers-${timeIndex}-${dayIndex}-${cellIndex}`}
-                            value={slot.teacher}
-                            onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'teacher', e.target.value)}
-                            onKeyDown={(e) => handleKeyDown(e, activeTable.id, dayIndex, timeIndex, cellIndex, 'teacher')}
-                            className="border p-1 mb-1 w-full"
-                            ref={el => {
-                              if (!inputRefs.current[timeIndex]) inputRefs.current[timeIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex]) inputRefs.current[timeIndex][dayIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
-                              inputRefs.current[timeIndex][dayIndex][cellIndex].teacher = el;
-                            }}
-                            placeholder='Teacher'
-                          />
-                          <datalist id={`teachers-${timeIndex}-${dayIndex}-${cellIndex}`}>
-                            {teachers.map((teacher) => (
-                              <option key={teacher} value={teacher} />
-                            ))}
-                          </datalist>
-                        </div>
-                        <div className="relative">
-                          <input
                             list={`subjects-${timeIndex}-${dayIndex}-${cellIndex}`}
                             value={slot.subject}
                             onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'subject', e.target.value)}
-                            onKeyDown={(e) => moveToNextInput(dayIndex, timeIndex, cellIndex, 'subject')}
+                            onKeyDown={(e) => moveToNextInput(e, activeTable.id, dayIndex, timeIndex, cellIndex, 'subject')}
                             className="border p-1 mb-1 w-full"
                             ref={el => {
                               if (!inputRefs.current[timeIndex]) inputRefs.current[timeIndex] = [];
@@ -269,10 +261,31 @@ const TimetableManagement = () => {
                         </div>
                         <div className="relative">
                           <input
+                            list={`teachers-${timeIndex}-${dayIndex}-${cellIndex}`}
+                            value={slot.teacher}
+                            onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'teacher', e.target.value)}
+                            onKeyDown={(e) => moveToNextInput(e, activeTable.id, dayIndex, timeIndex, cellIndex, 'teacher')}
+                            className="border p-1 mb-1 w-full"
+                            ref={el => {
+                              if (!inputRefs.current[timeIndex]) inputRefs.current[timeIndex] = [];
+                              if (!inputRefs.current[timeIndex][dayIndex]) inputRefs.current[timeIndex][dayIndex] = [];
+                              if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
+                              inputRefs.current[timeIndex][dayIndex][cellIndex].teacher = el;
+                            }}
+                            placeholder='Teacher'
+                          />
+                          <datalist id={`teachers-${timeIndex}-${dayIndex}-${cellIndex}`}>
+                            {teachers.map((teacherIDs) => (
+                              <option key={teacherIDs} value={teacherIDs} />
+                            ))}
+                          </datalist>
+                        </div>
+                        <div className="relative">
+                          <input
                             list={`rooms-${timeIndex}-${dayIndex}-${cellIndex}`}
                             value={slot.room}
                             onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'room', e.target.value)}
-                            onKeyDown={(e) => moveToNextInput(dayIndex, timeIndex, cellIndex, 'room')}
+                            onKeyDown={(e) => moveToNextInput(e, activeTable.id, dayIndex, timeIndex, cellIndex, 'room')}
                             className="border p-1 mb-1 w-full"
                             ref={el => {
                               if (!inputRefs.current[timeIndex]) inputRefs.current[timeIndex] = [];

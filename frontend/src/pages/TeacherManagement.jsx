@@ -53,7 +53,7 @@ function TeacherManagement() {
     ]);
   };
 
-  const handleSubmit = (deptId, rowId) => {
+  const handleSubmit =(deptId, rowId) => {
     const department = departments.find((dept) => dept.id === deptId);
     const row = department.rows.find((row) => row.id === rowId);
   
@@ -72,7 +72,17 @@ function TeacherManagement() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dataToSend),
-    }).then((res) => {
+    })
+    .then(async (res) => {
+      try{
+        const result = await res.json();
+        console.log(result);
+        if (result.success===false){
+          alert('Error: ' + result.message);
+        }
+      }catch{
+        console.log("Error");
+      }
       if (res.ok) {
         setDepartments((prev) =>
           prev.map((dept) =>
