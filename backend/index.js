@@ -8,7 +8,7 @@ import courseRoutes from "./routes/courseRoutes.js";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = 5000;
 
 // Connect to MongoDB
 connectDB();
