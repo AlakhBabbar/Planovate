@@ -46,7 +46,7 @@ const TimetableManagement = () => {
 
   const fetchTeachers = async () => {
     try {
-      const response = await fetch('/teacher');
+      const response = await fetch('https://planovate-backend.onrender.com/teacher');
       if (!response.ok) {
         console.error('Failed to fetch teachers');
         return;
