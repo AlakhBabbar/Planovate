@@ -14,13 +14,29 @@ const courseSchema = new mongoose.Schema({
         required: true,
     },
     credits: {
-        type: Number,
+        type: String,
         required: true,
     },
     teachers:{
         type: [String],
         required: true,
-    }
+    },
+    faculty:{
+        type: String,
+        required: true,
+    },
+    semester:{
+        type: String,
+        required: true,
+    },
+    department:{
+        type: String,
+        required: true,
+    },
+    unid:{
+        type: Number,
+        required: true,
+    },
 });
 
 const course = mongoose.model("course", courseSchema);
