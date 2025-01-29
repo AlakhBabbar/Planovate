@@ -8,7 +8,7 @@ const createCourse = async (json) => {
         // Check if the course already exists
         const result = await course.findOne({ID});
         if (result) {
-            return {createCourse: false, error: "Course already exists with this ID" };
+            return {success : false, error: "Course already exists with this ID" };
         }
 
         // Save the course
@@ -25,7 +25,7 @@ const createCourse = async (json) => {
         });
 
         await newCourse.save();
-        return {createCourse:true, message: "Course saved" };
+        return {success :true, message: "Course saved" };
     } catch (err) {
         throw new Error(`Error: ${err.message}`);
     }

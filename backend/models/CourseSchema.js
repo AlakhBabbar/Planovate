@@ -14,7 +14,7 @@ const courseSchema = new mongoose.Schema({
         required: true,
     },
     credits: {
-        type: Number,
+        type: String,
         required: true,
     },
     teachers:{
@@ -31,6 +31,10 @@ const courseSchema = new mongoose.Schema({
     },
     department:{
         type: String,
+        required: true,
+    },
+    unid:{
+        type: Number,
         required: true,
     },
 });
