@@ -27,7 +27,23 @@ export const createTeacher = async (json) => {
 
 export const getTeachers = async (req, res) => {
     try {
-        const teachers = await Teacher.find();
+        const { faculty, department } = req.query;
+
+        if (!faculty && !department) {
+            const teachers = await Teacher.distinct("ID");
+            return teachers;
+        }
+        
+        if (!faculty) {
+            const teachers = await Teacher.distinct("ID", { department });
+            return teachers;
+        }
+
+        if (!department) {
+            const teachers = await Teacher.distinct("ID", { faculty });
+            return teachers;
+        }
+        const teachers = await Teacher.distinct("ID", { faculty, department });
         return teachers;
     } catch (error) {
         throw new Error(`Error fetching teachers: ${error.message}`);
@@ -73,5 +89,30 @@ export const deleteTeacher = async (ID) => {
         return { success: true, message: "Teacher deleted successfully" };
     } catch (error) {
         throw new Error(`Error deleting teacher: ${error.message}`);
+    }
+};
+
+export const getFaculty = async (req, res) => {
+    try {
+        const faculties = await Teacher.distinct("faculty");
+        return faculties;
+    } catch (error) {
+        throw new Error(`Error fetching faculties: ${error.message}`);
+    }
+};
+
+export const getDepartment = async (req,res) => {
+    try {
+        const { faculty } = req.query;
+
+        if (!faculty) {
+            const departments = await Teacher.distinct("department");
+            return departments;
+        }
+        const departments = await Teacher.distinct("department", {faculty});
+        return departments;
+
+    }catch (error) {
+        throw new Error(`Error fetching departments: ${error.message}`);
     }
 };

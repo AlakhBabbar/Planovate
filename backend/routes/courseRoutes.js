@@ -1,15 +1,31 @@
 import express from "express";
-import { createCourse, updateCourse, deleteCourse } from "../methods/course.js";
+import { createCourse, updateCourse, deleteCourse, getCourse, getSemester, getCredits } from "../methods/course.js";
 
 const router = express.Router();
 
-// router.get("/", async (req, res) => {
-//     getTeachers().then((result) => {
-//         res.json(result);
-//     }).catch((message) => {
-//         res.status(500).json({error: message});
-//     });
-// });
+router.get("/", async (req, res) => {
+    getCourse(req).then((result) => {
+        res.json(result);
+    }).catch((message) => {
+        res.status(500).json({error: message});
+    });
+});
+
+router.get("/semester", async (req, res) => {
+    getSemester(req).then((result) => {
+        res.json(result);
+    }).catch((message) => {
+        res.status(500).json({error: message});
+    });
+});
+
+router.get("/credits", async (req, res) => {
+    getCredits(req).then((result) => {
+        res.json(result);
+    }).catch((message) => {
+        res.status(500).json({error: message});
+    });
+});
 
 router.post("/", async (req, res) => {
     createCourse(req.body).then((message) => {

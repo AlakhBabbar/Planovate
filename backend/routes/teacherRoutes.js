@@ -1,11 +1,28 @@
 import express from "express";
 import { clashTeacher } from "../methods/clashTeacher.js";
-import { getTeachers, createTeacher, updateTeacher, deleteTeacher } from "../methods/teacher.js";
+import { getTeachers, createTeacher, updateTeacher, deleteTeacher, getFaculty, getDepartment } from "../methods/teacher.js";
 
 const router = express.Router();
 
+router.get("/faculty", async (req, res) => {
+    getFaculty().then((result) => {
+        res.json(result);
+    }).catch((message) => {
+        res.status(500).json({error: message});
+    });
+});
+
+router.get("/department", async (req, res) => {
+    getDepartment(req).then((result) => {
+        res.json(result);
+    }).catch((message) => {
+        res.status(500).json({error: message});
+    });
+});
+
+
 router.get("/", async (req, res) => {
-    getTeachers().then((result) => {
+    getTeachers(req).then((result) => {
         res.json(result);
     }).catch((message) => {
         res.status(500).json({error: message});

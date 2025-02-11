@@ -1,6 +1,5 @@
 import course from "../models/CourseSchema.js";
 
-
 const createCourse = async (json) => {
     try {
         const {unid, name, code, ID, credits, teachers,faculty, semester, department } = json;
@@ -68,5 +67,50 @@ const updateCourse = async (json) => {
     }
 };
 
+const getCourse = async (req, res)=>{
+    try {
+        const {faculty, semester, department} = req.query;
 
-export { createCourse, deleteCourse, updateCourse };
+        let filter = {};
+
+        if (faculty) filter.faculty = faculty;
+        if (semester) filter.semester = semester;
+        if (department) filter.department = department;
+
+
+        const courses = await course.distinct("ID", filter);
+        return courses;
+    } catch (err) {
+        throw new Error(`Error: ${err.message}`);
+        }
+};
+
+const getSemester = async (req, res)=>{
+    try {
+        const {faculty, department} = req.query;
+
+        let filter = {};
+
+        if (faculty) filter.faculty = faculty;
+        if (department) filter.department = department;
+
+        const semesters = await course.distinct("semester", filter);
+        return semesters;
+    } catch (err) {
+        throw new Error(`Error: ${err.message}`);
+    }
+};
+
+const getCredits = async (req, res)=>{
+    try {
+        const {ID} = req.query;
+
+        const credits = await course.distinct("credits", {ID});
+        return credits;
+    } catch (err) {
+        throw new Error(`Error: ${err.message}`);
+    }
+};
+
+
+export { createCourse, deleteCourse, updateCourse, getCourse, getSemester, getCredits };
