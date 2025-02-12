@@ -1,14 +1,17 @@
-## Steps to Run
+# Planovate - Timetable Management System
 
-1. Clone this repository.
-2. Navigate to the `backend` directory.
-3. Run `npm install` to install backend dependencies.
-4. Install MongoDB and `mongosh` if not already installed.
-5. Open `backend/db/db.js` and replace `process.env.mongo_url` with your MongoDB server link.
-6. Start the backend server by running `nodemon index.js`.
-7. Change to the `frontend` directory.
-8. Run `npm install` to install frontend dependencies.
-9. Start the frontend application by running `npm start`.
-10. Open your browser and paste the provided link.
+## Overview
+Planovate is a timetable management system designed to help educational institutions create and manage class schedules more efficiently. The goal is to reduce manual effort and prevent scheduling conflicts, such as overlapping faculty assignments or double-booked classrooms. Right now, the system focuses on resolving these clashes while making sure schedules are organized and easy to manage. 
 
-**Note:** This project is still under development.
+## Core Functionalities
+
+- **Automated Timetable Generation**: Generates class schedules while ensuring no room or faculty conflicts.
+- **Conflict Resolution**: Detects and prevents scheduling clashes for faculty and rooms.
+- **User-Friendly Interface**: A simple and intuitive UI for faculty members to view and manage schedules.
+- **API-Based System**: Uses backend APIs to store and retrieve timetable data efficiently.
+- **Error Handling Mechanism**: Ensures invalid entries or scheduling mistakes are flagged early.
+- **Customization Options**: Allows administrators to set custom rules for scheduling based on specific needs.
+
+This project is a work in progress, and future updates may include features like user authentication and credit-based class allotments. The aim is to make timetable management as smooth and hassle-free as possible!
+
+
