@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import connectDB from "./db/db.js";
 import teacherRoutes from "./routes/teacherRoutes.js";
 import courseRoutes from "./routes/courseRoutes.js";
+import roomRoutes from "./routes/roomRoutes.js";
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ app.use(express.json());
 // Routes
 app.use("/teacher", teacherRoutes);
 app.use("/course" , courseRoutes);
+app.use("/room", roomRoutes);
 
 // Start the server
 app.listen(PORT, () => {

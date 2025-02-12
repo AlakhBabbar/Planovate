@@ -6,6 +6,10 @@ const timeSchema = new mongoose.Schema({
 });
 
 const roomSchema = new mongoose.Schema({
+    unid: {
+        type:Number,
+        required: true,
+    },
     name: {
         type: String,
         required: true,
@@ -22,34 +26,27 @@ const roomSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
-    availabilty: {
+    availability: {
         day:{
             mon: {
-                type: Boolean,
-                required: true,
+                time: [timeSchema],
             },
             tue: {
-                type: Boolean,
-                required: true,
+                time: [timeSchema],
             },
             wed: {
-                type: Boolean,
-                required: true,
+                time: [timeSchema],
             },
             thu: {
-                type: Boolean,
-                required: true,
+                time: [timeSchema],
             },
             fri: {
-                type: Boolean,
-                required: true,
+                time: [timeSchema],
             },
             sat: {
-                type: Boolean,
-                required: true,
+                time: [timeSchema],
             },
         },
-        time: [timeSchema],
     },
 });
 

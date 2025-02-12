@@ -2,7 +2,7 @@ import room from "../models/RoomSchema.js";
 
 const createRoom = async (json) => {
     try {
-        const {name, ID, capacity, faculty} = json;
+        const {unid, name, ID, capacity, faculty, availability} = json;
 
         // Check if the room already exists
         const result = await room.findOne({ID});
@@ -12,10 +12,12 @@ const createRoom = async (json) => {
 
         // Save the room
         const newRoom = new room({
+            unid,
             name,
             ID,
             capacity,
             faculty,
+            availability,
         });
 
         await newRoom.save();
@@ -45,20 +47,43 @@ const deleteRoom = async (json) => {
 
 const updateRoom = async (json) => {
     try {
-        const { ID, name, capacity, faculty } = json;
+        console.log(json);
+        const { unid, name, ID, capacity, faculty, availability } = json;
 
-        // Check if the room exists
-        const result = await room.findOne({ID});
-        if (!result) {
-            return {updateRoom: false, error: "Room does not exist with this ID" };
+        // Create the update object
+        const data = { name, ID, capacity, faculty, availability };
+        console.log(data);
+        // Find the room by unid
+        const Room = await room.findOne({ unid });
+
+        if (Room) {
+            // Update the room's details
+            const updatedRoom = await room.updateOne({ unid }, { $set: data });
+
+            // Check if the update was successful
+            if (updatedRoom.modifiedCount > 0) {
+                return { success: true, message: "Room updated successfully", room: updatedRoom };
+            } else {
+                return { success: false, message: "No changes made to room data" };
+            }
         }
 
-        // Update the room
-        await room.updateOne({ID}, { name, capacity, faculty });
-        return {updateRoom:true, message: "Room updated" };
-    } catch (err) {
+        return { success: false, message: "Room not found" };
+    } catch (error) {
+        throw new Error(`Error updating room: ${error.message}`);
+    }
+};
+
+const getRoom = async (req) => {
+    try {
+        const {day, time} = req.query;
+
+        const rooms = await room.distinct("ID", { [`availability.day.${day}.time`]: { $elemMatch: { time, available: true } } });
+        return { success:true, rooms };
+    }
+    catch (err) {
         throw new Error(`Error: ${err.message}`);
     }
 };
 
-export { createRoom, deleteRoom, updateRoom };
+export { createRoom, deleteRoom, updateRoom, getRoom };
