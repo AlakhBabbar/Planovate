@@ -1,335 +1,239 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from "react";
+// import { Button } from "@/components/ui/button";
+import Header from "../components/Header";
+import Footer from "../components/Footer";
 
-const rooms = Array.from({ length: 50 }, (_, i) => `R${i + 101}`);
-const subjects = ['Math', 'Sci', 'Eng', 'Hist', 'Art'];
-const times = ['7:00 - 8:00', '8:00 - 9:00', '9:00 - 10:00', '10:00 - 11:00', '11:00 - 12:00', '13:00 - 14:00', '14:00 - 15:00', '16:00 - 17:00', '17:00 - 18:00'];
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const TimetableManagement = () => {
-  const [tables, setTables] = useState([
-    {
-      id: 1,
-      classInfo: { class: '', branch: '' },
-      timetable: times.map(() => days.map(() => [{ teacher: '', subject: '', room: '' }]))
-    }
+const Timetable = () => {
+  const [tables, setTables] = useState(["Table 1"]);
+  const [activeTable, setActiveTable] = useState("Table 1");
+  const [timeSlots, setTimeSlots] = useState([
+    "7:00 - 7:55",
+    "8:00 - 8:55",
+    "9:00 - 9:55",
+    "10:00 - 10:55",
+    "11:00 - 11:55",
+    "12:00 - 12:55",
+    "1:00 - 1:55",
+    "2:00 - 2:55",
   ]);
-  const [activeTableId, setActiveTableId] = useState(1);
-  const inputRefs = useRef([]);
-  const [teachers, setTeachers] = useState([]);
 
-  useEffect(() => {
-    fetchTeachers();
-  }, []);
+  const [batches, setBatches] = useState({});
 
-  const addNewTable = () => {
-    const newTableId = tables.length ? tables[tables.length - 1].id + 1 : 1;
-    const newTable = {
-      id: newTableId,
-      classInfo: { class: '', branch: '' },
-      timetable: times.map(() => days.map(() => [{ teacher: '', subject: '', room: '' }]))
-    };
+const splitBatch = (rowIndex, colIndex) => {
+  setBatches((prev) => {
+    const updatedBatches = { ...prev };
+    
+    // Initialize row & column if not exists
+    if (!updatedBatches[rowIndex]) updatedBatches[rowIndex] = {};
+    if (!updatedBatches[rowIndex][colIndex]) {
+      // Create Section A without Batch input before split
+      updatedBatches[rowIndex][colIndex] = [
+        { name: "", hasBatchInput: false } 
+      ];
+    }
+
+    // Add Batch input to existing section A
+    updatedBatches[rowIndex][colIndex][0].hasBatchInput = true;
+
+    // Add a new Section B with Batch input
+    updatedBatches[rowIndex][colIndex].push({ name: "", hasBatchInput: true });
+
+    return { ...updatedBatches };
+  });
+};
+
+const updateBatch = (rowIndex, colIndex, batchIndex, value) => {
+  setBatches((prev) => {
+    const updatedBatches = { ...prev };
+    updatedBatches[rowIndex][colIndex][batchIndex].name = value;
+    return { ...updatedBatches };
+  });
+};
+
+
+
+  const addTable = () => {
+    const newTable = `Table ${tables.length + 1}`;
     setTables([...tables, newTable]);
-    setActiveTableId(newTableId);
+    setActiveTable(newTable);
   };
 
-  const deleteTable = (id) => {
-    if (tables.length === 1) {
-      alert('Cannot delete the last table');
-      return;
-    }
-    setTables(tables.filter(table => table.id !== id));
-    if (activeTableId === id) {
-      setActiveTableId(tables[0].id);
+  const removeTable = (table) => {
+    setTables(tables.filter((t) => t !== table));
+    if (activeTable === table && tables.length > 1) {
+      setActiveTable(tables[0]);
     }
   };
 
-  const fetchTeachers = async () => {
-    try {
-      const response = await fetch('https://planovate-backend.onrender.com/teacher');
-      if (!response.ok) {
-        console.error('Failed to  fetch teachers');
-        return;
-      }
-      const data = await response.json();
-      const teacherIDs = data.map(teacher => teacher.ID); // Extract only the ID values
-      setTeachers(teacherIDs); // Set the IDs in the state
-    } catch (error) {
-      console.error('Error fetching teachers:', error);
-    }
+  const addTimeSlot = () => {
+    const lastSlot = timeSlots[timeSlots.length - 1];
+    const [startHour, startMinute] = lastSlot.split(" - ")[1].split(":");
+    let newHour = parseInt(startHour) + 1;
+    let newSlot = `${newHour}:00 - ${newHour}:55`;
+    setTimeSlots([...timeSlots, newSlot]);
   };
-
-  const handleClassInfoChange = (tableId, key, value) => {
-    setTables(tables.map(table =>
-      table.id === tableId ? { ...table, classInfo: { ...table.classInfo, [key]: value } } : table
-    ));
-  };
-
-  const handleChange = (tableId, dayIndex, timeIndex, cellIndex, key, value) => {
-    const table = tables.find(table => table.id === tableId);
-    if (!table.classInfo.class || !table.classInfo.branch) {
-      alert('Please fill in the class and branch information first.');
-      return;
-    }
-
-    const updatedTimetable = [...table.timetable];
-    updatedTimetable[timeIndex][dayIndex][cellIndex][key] = value;
-    setTables(tables.map(t => t.id === tableId ? { ...t, timetable: updatedTimetable } : t));
-  };
-
-  const handleBlurTeacher = async (tableId, dayIndex, timeIndex, cellIndex) => {
-    const table = tables.find(table => table.id === tableId);
-    const slot = table.timetable[timeIndex][dayIndex][cellIndex];
-    const requestData = {
-      teacher: slot.teacher,
-      time: times[timeIndex],
-      day: days[dayIndex],
-      class: table.classInfo.class,
-      branch: table.classInfo.branch,
-      batch: slot.batch || '',
-    };
-
-    try {
-      const response = await fetch('teacher/clash', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-
-      // Display result
-      if (result.clash) {
-        alert(`Clash detected: ${result.details}`);
-      } else {
-        alert('No clash detected');
-      }
-    } catch (error) {
-      console.error('Error checking clash:', error);
-    }
-  };
-
-  const moveToNextInput = (event, tableId, dayIndex, timeIndex, cellIndex, key) => {
-    if (event.key === 'Enter'){
-    if (key === 'subject') {
-      if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][dayIndex] && inputRefs.current[timeIndex][dayIndex][cellIndex]) {
-        inputRefs.current[timeIndex][dayIndex][cellIndex].teacher.focus();
-      }
-    } else if (key === 'teacher') {
-      handleBlurTeacher(tableId, dayIndex, timeIndex, cellIndex);
-      if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][dayIndex] && inputRefs.current[timeIndex][dayIndex][cellIndex]) {
-        inputRefs.current[timeIndex][dayIndex][cellIndex].room.focus();
-      }
-    } else if (key === 'room') {
-      const nextCellIndex = cellIndex + 1;
-      const nextTimeIndex = timeIndex + 1;
-      const nextDayIndex = dayIndex + 1;
-
-      if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][dayIndex] && inputRefs.current[timeIndex][dayIndex][nextCellIndex]) {
-        inputRefs.current[timeIndex][dayIndex][nextCellIndex].subject.focus();
-      } else if (inputRefs.current[nextTimeIndex] && inputRefs.current[nextTimeIndex][dayIndex] && inputRefs.current[nextTimeIndex][dayIndex][0]) {
-        inputRefs.current[nextTimeIndex][dayIndex][0].subject.focus();
-      } else if (inputRefs.current[timeIndex] && inputRefs.current[timeIndex][nextDayIndex] && inputRefs.current[timeIndex][nextDayIndex][0]) {
-        inputRefs.current[timeIndex][nextDayIndex][0].subject.focus();
-      }
-    }
-  }
-  };
-
-  const handleSplitCell = (tableId, dayIndex, timeIndex) => {
-    const table = tables.find(table => table.id === tableId);
-    const updatedTimetable = [...table.timetable];
-    updatedTimetable[timeIndex][dayIndex].push({ teacher: '', subject: '', room: '', batch: '' });
-    setTables(tables.map(t => t.id === tableId ? { ...t, timetable: updatedTimetable } : t));
-  };
-
-  const handleSave = async () => {
-    const table = tables.find(table => table.id === activeTableId);
-    const jsonData = table.timetable.flatMap((timeSlots, timeIndex) =>
-      timeSlots.flatMap((daySlots, dayIndex) =>
-        daySlots.map((slot) => ({
-          ...slot,
-          day: days[dayIndex],
-          time: times[timeIndex],
-          class: table.classInfo.class,
-          branch: table.classInfo.branch,
-        }))
-      )
-    );
-
-    try {
-      const response = await fetch('/api/save-timetable', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(jsonData),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save timetable');
-      }
-
-      alert('Timetable saved successfully');
-    } catch (error) {
-      console.error('Error saving timetable:', error);
-    }
-  };
-
-  const activeTable = tables.find(table => table.id === activeTableId);
-
-  if (!activeTable) {
-    return <div>Loading...</div>;
-  }
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="no-print">
-        <nav className="flex justify-end space-x-6 p-4 bg-gray-500 text-white">
-          <Link to="/rooms" className="hover:text-gray-400">Room List</Link>
-          <Link to="/courses" className="hover:text-gray-400">Course</Link>
-          <Link to="/teacher" className="hover:text-gray-400">Teacher List</Link>
-        </nav>
-      </header>
-      <div className="container mx-auto p-6">
-        <div className="flex items-center mb-4">
-          {tables.map(table => (
-            <div key={table.id} className={`px-4 py-2 border ${table.id === activeTableId ? 'bg-gray-300' : 'bg-gray-100'} cursor-pointer`} onClick={() => setActiveTableId(table.id)}>
-              Table {table.id}
-              <button onClick={() => deleteTable(table.id)} className="ml-2 text-red-500">x</button>
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      
+      {/* Floating Teacher & Room Occupancy Stats */}
+      <div className="fixed top-18 right-4 flex gap-4 z-50">
+        <div className="bg-gray-800 text-white p-4 rounded-lg shadow-lg">
+          <h3 className="text-lg font-bold">Teacher Occupancy</h3>
+          <p>Available: 10</p>
+          <p>Occupied: 5</p>
+        </div>
+        <div className="bg-gray-800 text-white p-4 rounded-lg shadow-lg">
+          <h3 className="text-lg font-bold">Room Occupancy</h3>
+          <p>Available: 8</p>
+          <p>Occupied: 7</p>
+        </div>
+      </div>
+
+
+      <div className="container mx-auto p-4">
+        {/* Tabs for Tables */}
+        <div className="flex items-center gap-2 mb-4">
+          {tables.map((table) => (
+            <div
+              key={table}
+              className={`px-4 py-2 border rounded-lg cursor-pointer ${
+                activeTable === table ? "bg-gray-300" : ""
+              }`}
+              onClick={() => setActiveTable(table)}
+            >
+              {table}
+              {table !== "Table 1" && (
+                <button
+                  className="ml-2 text-red-500"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeTable(table);
+                  }}
+                >
+                  ✖
+                </button>
+              )}
             </div>
           ))}
-          <button onClick={addNewTable} className="px-4 py-2 border bg-gray-100 ml-2">+</button>
+          <button className="px-3 py-2 border rounded-lg" onClick={addTable}>+</button>
         </div>
-        <div className="mb-4">
-          <label className="mr-2">Class:</label>
-          <input
-            type="text"
-            value={activeTable.classInfo.class}
-            onChange={(e) => handleClassInfoChange(activeTable.id, 'class', e.target.value)}
-            className="border p-2"
-          />
-          <label className="ml-4 mr-2">Branch:</label>
-          <input
-            type="text"
-            value={activeTable.classInfo.branch}
-            onChange={(e) => handleClassInfoChange(activeTable.id, 'branch', e.target.value)}
-            className="border p-2"
-          />
+
+        {/* Course, Branch, Semester Inputs */}
+        <div className="flex max-w-200 gap-4 mb-4">
+          <input type="text" placeholder="Course" className="border p-2 rounded-md w-1/3" />
+          <input type="text" placeholder="Branch/Batch" className="border p-2 rounded-md w-1/3" />
+          <select className="border p-2 rounded-md w-1/3">
+            <option value="">Select Semester</option>
+            {/* Options will be fetched from backend */}
+          </select>
         </div>
-        <table className="min-w-full bg-white border border-gray-300 shadow-lg">
-          <thead>
-            <tr>
-              <th className="border px-4 py-2"></th>
-              {days.map((day) => (
-                <th key={day} className="border px-4 py-2">{day}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {times.slice(0, 6).map((time, timeIndex) => (
-              <tr key={time}>
-                <td className="border px-4 py-2">{time}</td>
-                {days.map((day, dayIndex) => (
-                  <td key={day} className="border px-4 py-2 relative">
-                    {Array.isArray(activeTable.timetable[timeIndex][dayIndex]) && activeTable.timetable[timeIndex][dayIndex].map((slot, cellIndex) => (
-                      <div key={cellIndex} className="mb-2">
-                        <div className="relative">
-                          <input
-                            list={`subjects-${timeIndex}-${dayIndex}-${cellIndex}`}
-                            value={slot.subject}
-                            onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'subject', e.target.value)}
-                            onKeyDown={(e) => moveToNextInput(e, activeTable.id, dayIndex, timeIndex, cellIndex, 'subject')}
-                            className="border p-1 mb-1 w-full"
-                            ref={el => {
-                              if (!inputRefs.current[timeIndex]) inputRefs.current[timeIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex]) inputRefs.current[timeIndex][dayIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
-                              inputRefs.current[timeIndex][dayIndex][cellIndex].subject = el;
-                            }}
-                            placeholder='Subject'
-                          />
-                          <datalist id={`subjects-${timeIndex}-${dayIndex}-${cellIndex}`}>
-                            {subjects.map((subject) => (
-                              <option key={subject} value={subject} />
-                            ))}
-                          </datalist>
-                        </div>
-                        <div className="relative">
-                          <input
-                            list={`teachers-${timeIndex}-${dayIndex}-${cellIndex}`}
-                            value={slot.teacher}
-                            onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'teacher', e.target.value)}
-                            onKeyDown={(e) => moveToNextInput(e, activeTable.id, dayIndex, timeIndex, cellIndex, 'teacher')}
-                            className="border p-1 mb-1 w-full"
-                            ref={el => {
-                              if (!inputRefs.current[timeIndex]) inputRefs.current[timeIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex]) inputRefs.current[timeIndex][dayIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
-                              inputRefs.current[timeIndex][dayIndex][cellIndex].teacher = el;
-                            }}
-                            placeholder='Teacher'
-                          />
-                          <datalist id={`teachers-${timeIndex}-${dayIndex}-${cellIndex}`}>
-                            {teachers.map((teacherIDs) => (
-                              <option key={teacherIDs} value={teacherIDs} />
-                            ))}
-                          </datalist>
-                        </div>
-                        <div className="relative">
-                          <input
-                            list={`rooms-${timeIndex}-${dayIndex}-${cellIndex}`}
-                            value={slot.room}
-                            onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'room', e.target.value)}
-                            onKeyDown={(e) => moveToNextInput(e, activeTable.id, dayIndex, timeIndex, cellIndex, 'room')}
-                            className="border p-1 mb-1 w-full"
-                            ref={el => {
-                              if (!inputRefs.current[timeIndex]) inputRefs.current[timeIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex]) inputRefs.current[timeIndex][dayIndex] = [];
-                              if (!inputRefs.current[timeIndex][dayIndex][cellIndex]) inputRefs.current[timeIndex][dayIndex][cellIndex] = {};
-                              inputRefs.current[timeIndex][dayIndex][cellIndex].room = el;
-                            }}
-                            placeholder='Room'
-                          />
-                          <datalist id={`rooms-${timeIndex}-${dayIndex}-${cellIndex}`}>
-                            {rooms.map((room) => (
-                              <option key={room} value={room} />
-                            ))}
-                          </datalist>
-                        </div>
-                        {activeTable.timetable[timeIndex][dayIndex].length > 1 && (
-                          <input
-                            type="text"
-                            placeholder="Batch"
-                            value={slot.batch}
-                            onChange={(e) => handleChange(activeTable.id, dayIndex, timeIndex, cellIndex, 'batch', e.target.value)}
-                            className="border p-1 mb-1 w-full"
-                          />
-                        )}
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => handleSplitCell(activeTable.id, dayIndex, timeIndex)}
-                      className="absolute top-0 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white rounded-full p-1"
-                    >
-                      +
-                    </button>
-                  </td>
+
+        {/* Timetable Grid */}
+<div className="overflow-x-auto">
+  <table className="w-full border">
+    <thead>
+      <tr className="bg-gray-200">
+        <th className="border p-2">Time</th>
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+          <th key={day} className="border p-2">{day}</th>
+        ))}
+      </tr>
+    </thead>
+    <tbody>
+      {timeSlots.map((slot, rowIndex) => (
+        <tr key={rowIndex}>
+          <td className="border p-2">{slot}</td>
+          {[...Array(6)].map((_, colIndex) => (
+            <td key={colIndex} className="border p-2 relative">
+              <div className="flex gap-2">
+                {/* Render each section horizontally */}
+                {batches[rowIndex]?.[colIndex]?.map((batch, batchIndex) => (
+                  <div key={batchIndex} className="border p-2 max-w-50 flex flex-col gap-1">
+                    {/* Batch Input (Added only when Split is clicked) */}
+                    {batch.hasBatchInput && (
+                      <input 
+                        type="text" 
+                        placeholder="Batch Name" 
+                        value={batch.name} 
+                        onChange={(e) => updateBatch(rowIndex, colIndex, batchIndex, e.target.value)}
+                        className="border p-1 w-full rounded"
+                      />
+                    )}
+                    {/* Course, Teacher, Room Dropdowns */}
+                    <select className="border p-1 rounded w-full">
+                      <option value="">Course</option>
+                    </select>
+                    <select className="border p-1 rounded w-full">
+                      <option value="">Teacher</option>
+                    </select>
+                    <select className="border p-1 rounded w-full">
+                      <option value="">Room</option>
+                    </select>
+                    
+                  </div>
+                  
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={handleSave} className="mt-4 bg-green-500 text-white p-2 rounded">
-          Save Timetable
+                
+              <button 
+                  className="bg-blue-500 text-white px-3 py-1 rounded mt-2 hover:bg-blue-700 transition w-full"
+                  onClick={() => splitBatch(rowIndex, colIndex)}
+                >
+                  + Split Batch
+                </button>
+              </div>
+
+              {/* Only Show Split Button If There is No Batch Data */}
+              {!batches[rowIndex]?.[colIndex]?.length && (
+                <div>
+                    <select className="border p-1 rounded w-full">
+                      <option value="">Course</option>
+                    </select>
+                    <select className="border p-1 rounded w-full">
+                      <option value="">Teacher</option>
+                    </select>
+                    <select className="border p-1 rounded w-full">
+                      <option value="">Room</option>
+                    </select>
+                {/* <button 
+                  className="bg-blue-500 text-white px-3 py-1 rounded mt-2 hover:bg-blue-700 transition w-full"
+                  onClick={() => splitBatch(rowIndex, colIndex)}
+                >
+                  + Split Batch
+                </button> */}
+                </div>
+              )}
+            </td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+
+
+
+
+
+        <button onClick={addTimeSlot} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md">
+          + Add Time Slot
         </button>
+        <div className="mt-4 flex gap-4">
+  <button className="px-4 py-2 bg-green-500 text-white rounded-md">
+    Save
+  </button>
+  <button className="px-4 py-2 bg-yellow-500 text-white rounded-md">
+    Export
+  </button>
+</div>
+
       </div>
+      
+      <Footer />
     </div>
   );
 };
 
-export default TimetableManagement;
+export default Timetable;
