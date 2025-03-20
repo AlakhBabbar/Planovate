@@ -3,7 +3,7 @@ import teachOcc from "../models/TeachOcc.js";
 // Checking teacher occupation and updating if necessary
 const clashTeacher = async (json) => {
     try {
-        const { teacher, class: classs, branch, day, time, batch, action } = json;
+        const { teacher, class: classs, branch, day, time, batch} = json;
 
         // Create the query object
         const query = { class: classs, branch, day, time };

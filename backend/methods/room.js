@@ -29,16 +29,18 @@ const createRoom = async (json) => {
 
 const deleteRoom = async (json) => {
     try {
-        const { ID } = json;
+        const { unid } = json;
+
+        console.log(unid);
 
         // Check if the room exists
-        const result = await room.findOne({ID});
+        const result = await room.findOne({unid});
         if (!result) {
-            return {deleteRoom: false, error: "Room does not exist with this ID" };
+            return {deleteRoom: false, message: "Room does not exist with this ID" };
         }
 
         // Delete the room
-        await room.deleteOne({ID});
+        await room.deleteOne({unid});
         return {deleteRoom:true, message: "Room deleted" };
     } catch (err) {
         throw new Error(`Error: ${err.message}`);
@@ -49,23 +51,21 @@ const updateRoom = async (json) => {
     try {
         console.log(json);
         const { unid, name, ID, capacity, faculty, availability } = json;
+        // const unid = Number(json.unid);  // ✅ Ensure unid is a number
 
         // Create the update object
-        const data = { name, ID, capacity, faculty, availability };
+        const data = { name, capacity, faculty, availability };
         console.log(data);
-        // Find the room by unid
-        const Room = await room.findOne({ unid });
 
-        if (Room) {
-            // Update the room's details
-            const updatedRoom = await room.updateOne({ unid }, { $set: data });
+        // Find and update the room
+        const updatedRoom = await room.findOneAndUpdate(
+            { ID },
+            { $set: data },
+            { new: true } // ✅ Returns updated document
+        );
 
-            // Check if the update was successful
-            if (updatedRoom.modifiedCount > 0) {
-                return { success: true, message: "Room updated successfully", room: updatedRoom };
-            } else {
-                return { success: false, message: "No changes made to room data" };
-            }
+        if (updatedRoom) {
+            return { success: true, message: "Room updated successfully", room: updatedRoom };
         }
 
         return { success: false, message: "Room not found" };
@@ -73,6 +73,7 @@ const updateRoom = async (json) => {
         throw new Error(`Error updating room: ${error.message}`);
     }
 };
+
 
 const getRoom = async (req) => {
     try {
@@ -86,4 +87,27 @@ const getRoom = async (req) => {
     }
 };
 
-export { createRoom, deleteRoom, updateRoom, getRoom };
+const fetchRooms = async (faculty) => {   // ✅ Accept faculty directly
+    try {
+        if (!faculty) {
+            throw new Error("Faculty parameter is missing");
+        }
+
+        const rooms = await room.find({ faculty });
+        return { success: true, rooms };
+    } catch (error) {
+        throw new Error(`Error fetching rooms: ${error.message}`);
+    }
+};
+
+
+const fetchFaculty = async (req) => {
+    try {
+        const faculties = await room.distinct("faculty");
+        return { success: true, faculties };
+    } catch (error) {
+        throw new Error(`Error fetching faculties: ${error.message}`);
+    }
+}
+
+export { createRoom, deleteRoom, updateRoom, getRoom, fetchRooms, fetchFaculty };

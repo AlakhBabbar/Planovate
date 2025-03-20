@@ -50,6 +50,24 @@ export const getTeachers = async (req, res) => {
     }
 };
 
+export const fetchTeachers = async (req, res) => {
+    try {
+        const { faculty, department } = req.query;
+
+        let query = {};
+        if (faculty) query.faculty = faculty;
+        if (department) query.department = department;
+
+        // Fetch teachers with unid, id, and name
+        const teachers = await Teacher.find(query, { _id: 0, unid: 1, ID: 1, name: 1 });
+
+        return teachers; // Returns [{ unid: "123456", id: "T001", name: "John Doe" }]
+    } catch (error) {
+        throw new Error(`Error fetching teachers: ${error.message}`);
+    }
+};
+
+
 export const updateTeacher = async (json) => {
     try {
         console.log(json);
@@ -80,17 +98,39 @@ export const updateTeacher = async (json) => {
 };
 
 
-export const deleteTeacher = async (ID) => {
+export const deleteTeacher = async (json) => {
     try {
-        const result = await Teacher.findOneAndDelete({ ID });
-        if (!result) {
+        const { unid } = json;
+
+        if (!unid) {
+            return { success: false, message: "Teacher ID (ID) is required" };
+        }
+
+        // Debugging: Find the teacher before deleting
+        const teacher = await Teacher.findOne({ unid });
+        console.log({unid});
+        console.log("Found Teacher:", teacher);
+
+        if (!teacher) {
             return { success: false, message: "Teacher not found" };
         }
+
+        // Delete the teacher
+        const result = await Teacher.deleteOne({ unid});
+        console.log("Delete Result:", result);
+
+        if (result.deletedCount === 0) {
+            return { success: false, message: "Teacher was not deleted" };
+        }
+
         return { success: true, message: "Teacher deleted successfully" };
     } catch (error) {
+        console.error("Error deleting teacher:", error);
         throw new Error(`Error deleting teacher: ${error.message}`);
     }
 };
+
+
 
 export const getFaculty = async (req, res) => {
     try {
