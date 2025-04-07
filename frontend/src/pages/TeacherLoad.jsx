@@ -114,7 +114,7 @@ const TeacherLoad = () => {
     }
   
     try {
-      const response = await fetch("http://localhost:5000/teacher", {
+      const response = await fetch("http://localhost:5000/teacher" || "https://planovate-backend.onrender.com/teacher", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -158,7 +158,7 @@ const TeacherLoad = () => {
     }
   
     try {
-      const response = await fetch(`http://localhost:5000/teacher/${teacher.unid}`, {
+      const response = await fetch(`http://localhost:5000/teacher/${teacher.unid}` || `https://planovate-backend.onrender.com/teacher/${teacher.unid}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
