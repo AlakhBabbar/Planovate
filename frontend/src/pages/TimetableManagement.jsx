@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-// import { Button } from "@/components/ui/button";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
+import TimetableTable from "../components/TimetableTable";
+import { checkConflicts } from "../utils/Conflict";
 
 const Timetable = () => {
   const [tables, setTables] = useState(["Table 1"]);
@@ -18,37 +19,102 @@ const Timetable = () => {
   ]);
 
   const [batches, setBatches] = useState({});
+  const [batchData, setBatchData] = useState({});
+  const [conflicts, setConflicts] = useState({});
 
-const splitBatch = (rowIndex, colIndex) => {
-  setBatches((prev) => {
-    const updatedBatches = { ...prev };
+  const createBatch = (rowIndex, colIndex) => {
+    setBatches((prev) => {
+      const key = `${rowIndex}-${colIndex}`;
+      const tableData = prev[activeTable] || {};
+      return {
+        ...prev,
+        [activeTable]: {
+          ...tableData,
+          [key]: (tableData[key] || 1) + 1
+        }
+      };
+    });
+  };
+
+  const updateBatch = (rowIndex, colIndex, batchIndex, field, value) => {
+    setBatchData((prev) => {
+      const key = `${rowIndex}-${colIndex}-${batchIndex}`;
+      const tableData = prev[activeTable] || {};
+      const updated = {
+        ...prev,
+        [activeTable]: {
+          ...tableData,
+          [key]: {
+            ...(tableData[key] || {}),
+            [field]: value
+          }
+        }
+      };
+      
+      if (field === "teacher" || field === "room") {
+        const conflictResult = checkConflicts({
+          rowIndex,
+          colIndex,
+          batchIndex,
+          field,
+          nextValue: value,
+          batchesByTable: {
+            ...batches,
+            [activeTable]: updated[activeTable]
+          },
+          batchDataByTable: updated,
+          tableId: activeTable,
+          tableIds: tables
+        });
+        
+        setConflicts((prevConflicts) => {
+          const tableConflicts = prevConflicts[activeTable] || {};
+          return {
+            ...prevConflicts,
+            [activeTable]: {
+              ...tableConflicts,
+              [key]: {
+                ...(tableConflicts[key] || {}),
+                teacher: field === "teacher" ? conflictResult.teacher : (tableConflicts[key]?.teacher || { conflict: false }),
+                room: field === "room" ? conflictResult.room : (tableConflicts[key]?.room || { conflict: false })
+              }
+            }
+          };
+        });
+      }
+      
+      return updated;
+    });
+  };
+
+  const getConflictStats = () => {
+    const teacherConflicts = new Set();
+    const roomConflicts = new Set();
     
-    // Initialize row & column if not exists
-    if (!updatedBatches[rowIndex]) updatedBatches[rowIndex] = {};
-    if (!updatedBatches[rowIndex][colIndex]) {
-      // Create Section A without Batch input before split
-      updatedBatches[rowIndex][colIndex] = [
-        { name: "", hasBatchInput: false } 
-      ];
-    }
+    Object.values(conflicts).forEach((tableConflicts) => {
+      Object.entries(tableConflicts).forEach(([key, conflictData]) => {
+        if (conflictData.teacher?.conflict) {
+          const cellKey = key.split("-").slice(0, 2).join("-");
+          conflictData.teacher.matches?.forEach(match => {
+            if (match.teacher) teacherConflicts.add(`${match.teacher}-${cellKey}`);
+          });
+        }
+        if (conflictData.room?.conflict) {
+          const cellKey = key.split("-").slice(0, 2).join("-");
+          conflictData.room.matches?.forEach(match => {
+            if (match.room) roomConflicts.add(`${match.room}-${cellKey}`);
+          });
+        }
+      });
+    });
+    
+    return {
+      teacherConflicts: teacherConflicts.size,
+      roomConflicts: roomConflicts.size
+    };
+  };
 
-    // Add Batch input to existing section A
-    updatedBatches[rowIndex][colIndex][0].hasBatchInput = true;
-
-    // Add a new Section B with Batch input
-    updatedBatches[rowIndex][colIndex].push({ name: "", hasBatchInput: true });
-
-    return { ...updatedBatches };
-  });
-};
-
-const updateBatch = (rowIndex, colIndex, batchIndex, value) => {
-  setBatches((prev) => {
-    const updatedBatches = { ...prev };
-    updatedBatches[rowIndex][colIndex][batchIndex].name = value;
-    return { ...updatedBatches };
-  });
-};
+  const stats = getConflictStats();
 
 
 
@@ -77,17 +143,37 @@ const updateBatch = (rowIndex, colIndex, batchIndex, value) => {
     <div className="min-h-screen flex flex-col">
       <Header />
       
-      {/* Floating Teacher & Room Occupancy Stats */}
-      <div className="fixed top-18 right-4 flex gap-4 z-50">
-        <div className="bg-gray-800 text-white p-4 rounded-lg shadow-lg">
-          <h3 className="text-lg font-bold">Teacher Occupancy</h3>
-          <p>Available: 10</p>
-          <p>Occupied: 5</p>
+      {/* Floating Teacher & Room Conflict Warnings */}
+      <div className="fixed top-20 right-4 flex flex-col gap-3 z-50">
+        <div className={`p-3 rounded-lg shadow-lg transition-colors ${
+          stats.teacherConflicts > 0 
+            ? "bg-red-600 text-white" 
+            : "bg-green-600 text-white"
+        }`}>
+          <h3 className="text-sm font-bold mb-1">Teacher Status</h3>
+          {stats.teacherConflicts > 0 ? (
+            <>
+              <p className="text-xs">⚠️ Conflicts: {stats.teacherConflicts}</p>
+              <p className="text-xs mt-1 opacity-90">Same teacher assigned multiple times</p>
+            </>
+          ) : (
+            <p className="text-xs">✓ No conflicts detected</p>
+          )}
         </div>
-        <div className="bg-gray-800 text-white p-4 rounded-lg shadow-lg">
-          <h3 className="text-lg font-bold">Room Occupancy</h3>
-          <p>Available: 8</p>
-          <p>Occupied: 7</p>
+        <div className={`p-3 rounded-lg shadow-lg transition-colors ${
+          stats.roomConflicts > 0 
+            ? "bg-red-600 text-white" 
+            : "bg-green-600 text-white"
+        }`}>
+          <h3 className="text-sm font-bold mb-1">Room Status</h3>
+          {stats.roomConflicts > 0 ? (
+            <>
+              <p className="text-xs">⚠️ Conflicts: {stats.roomConflicts}</p>
+              <p className="text-xs mt-1 opacity-90">Same room assigned multiple times</p>
+            </>
+          ) : (
+            <p className="text-xs">✓ No conflicts detected</p>
+          )}
         </div>
       </div>
 
@@ -131,103 +217,32 @@ const updateBatch = (rowIndex, colIndex, batchIndex, value) => {
         </div>
 
         {/* Timetable Grid */}
-<div className="overflow-x-auto">
-  <table className="w-full border">
-    <thead>
-      <tr className="bg-gray-200">
-        <th className="border p-2">Time</th>
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-          <th key={day} className="border p-2">{day}</th>
-        ))}
-      </tr>
-    </thead>
-    <tbody>
-      {timeSlots.map((slot, rowIndex) => (
-        <tr key={rowIndex}>
-          <td className="border p-2">{slot}</td>
-          {[...Array(6)].map((_, colIndex) => (
-            <td key={colIndex} className="border p-2 relative">
-              <div className="flex gap-2">
-                {/* Render each section horizontally */}
-                {batches[rowIndex]?.[colIndex]?.map((batch, batchIndex) => (
-                  <div key={batchIndex} className="border p-2 max-w-50 flex flex-col gap-1">
-                    {/* Batch Input (Added only when Split is clicked) */}
-                    {batch.hasBatchInput && (
-                      <input 
-                        type="text" 
-                        placeholder="Batch Name" 
-                        value={batch.name} 
-                        onChange={(e) => updateBatch(rowIndex, colIndex, batchIndex, e.target.value)}
-                        className="border p-1 w-full rounded"
-                      />
-                    )}
-                    {/* Course, Teacher, Room Dropdowns */}
-                    <select className="border p-1 rounded w-full">
-                      <option value="">Course</option>
-                    </select>
-                    <select className="border p-1 rounded w-full">
-                      <option value="">Teacher</option>
-                    </select>
-                    <select className="border p-1 rounded w-full">
-                      <option value="">Room</option>
-                    </select>
-                    
-                  </div>
-                  
-                ))}
-                
-              <button 
-                  className="bg-blue-500 text-white px-3 py-1 rounded mt-2 hover:bg-blue-700 transition w-full"
-                  onClick={() => splitBatch(rowIndex, colIndex)}
-                >
-                  + Split Batch
-                </button>
-              </div>
+        <TimetableTable
+          timeSlots={timeSlots}
+          batches={batches[activeTable] || {}}
+          batchData={batchData[activeTable] || {}}
+          conflicts={conflicts[activeTable] || {}}
+          onCreateBatch={createBatch}
+          onUpdateBatch={updateBatch}
+        />
 
-              {/* Only Show Split Button If There is No Batch Data */}
-              {!batches[rowIndex]?.[colIndex]?.length && (
-                <div>
-                    <select className="border p-1 rounded w-full">
-                      <option value="">Course</option>
-                    </select>
-                    <select className="border p-1 rounded w-full">
-                      <option value="">Teacher</option>
-                    </select>
-                    <select className="border p-1 rounded w-full">
-                      <option value="">Room</option>
-                    </select>
-                {/* <button 
-                  className="bg-blue-500 text-white px-3 py-1 rounded mt-2 hover:bg-blue-700 transition w-full"
-                  onClick={() => splitBatch(rowIndex, colIndex)}
-                >
-                  + Split Batch
-                </button> */}
-                </div>
-              )}
-            </td>
-          ))}
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-
-
-
-
-
-
-        <button onClick={addTimeSlot} className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md">
+        {/* Add Time Slot Button */}
+        <button 
+          onClick={addTimeSlot} 
+          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+        >
           + Add Time Slot
         </button>
+
+        {/* Action Buttons */}
         <div className="mt-4 flex gap-4">
-  <button className="px-4 py-2 bg-green-500 text-white rounded-md">
-    Save
-  </button>
-  <button className="px-4 py-2 bg-yellow-500 text-white rounded-md">
-    Export
-  </button>
-</div>
+          <button className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors">
+            Save
+          </button>
+          <button className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors">
+            Export
+          </button>
+        </div>
 
       </div>
       
