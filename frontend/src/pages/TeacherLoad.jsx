@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
+import { teacherService } from "../firebase/services";
 
 const TeacherLoad = () => {
   const [faculties, setFaculties] = useState([]); // Fetched faculty list
@@ -25,8 +26,7 @@ const TeacherLoad = () => {
 
   const fetchFaculties = async () => {
     try {
-      const response = await fetch("http://localhost:5000/teacher/faculty");
-      const data = await response.json();
+      const data = await teacherService.listFaculties();
       setFaculties(data);
     } catch (error) {
       console.error("Error fetching faculties:", error);
@@ -35,9 +35,7 @@ const TeacherLoad = () => {
 
   const fetchDepartments = async (faculty) => {
     try {
-      const response = await fetch(`http://localhost:5000/teacher/department?faculty=${faculty}`);
-      const data = await response.json();
-      
+      const data = await teacherService.listDepartments(faculty);
       setDepartments(data);
       setSelectedDepartment(""); // Ensure "Select Department" is the default
       setIsDepartmentEntered(false); // Reset department selection state
@@ -50,18 +48,13 @@ const TeacherLoad = () => {
 
   const fetchTeachers = async (faculty, department) => {
     try {
-      const response = await fetch(`http://localhost:5000/teacher/fetchTeacher?faculty=${faculty}&department=${department}`);
-      const data = await response.json();
-      console.log("Fetched Teachers:", data); // Debugging log
-  
-      // Convert fetched teachers into input-ready format
-      const formattedTeachers = data.map(teacher => ({
-        unid: teacher.unid || Date.now(), // Ensure each teacher has a unique id
+      const data = await teacherService.listTeachers({ faculty, department });
+      const formattedTeachers = data.map((teacher) => ({
+        unid: teacher.unid || Date.now(),
         id: teacher.ID,
         name: teacher.name,
-        isAdded: true, // Mark them as already added
+        isAdded: true,
       }));
-  
       setTeachers(formattedTeachers);
     } catch (error) {
       console.error("Error fetching teachers:", error);
@@ -114,35 +107,20 @@ const TeacherLoad = () => {
     }
   
     try {
-      const response = await fetch("http://localhost:5000/teacher" || "https://planovate-backend.onrender.com/teacher", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          unid: teacher.unid,
-          ID: teacher.id,
-          name: teacher.name,
-          faculty: selectedFaculty,
-          department: selectedDepartment,
-        }),
+      const unid = await teacherService.upsertTeacher({
+        unid: teacher.unid,
+        ID: teacher.id,
+        name: teacher.name,
+        faculty: selectedFaculty,
+        department: selectedDepartment,
       });
-  
-      const data = await response.json();
-      console.log("API Response (POST):", data); // Debugging log
-  
-      if (data.success) {
-        console.log("Teacher added successfully!");
-  
-        // Update UI to mark teacher as "added"
-        const updatedTeachers = [...teachers];
-        updatedTeachers[index].isAdded = true;
-        updatedTeachers[index].unid = data.unid;
-        setTeachers(updatedTeachers); 
-  
-        // **Do NOT reset department or teachers here!**
-        fetchTeachers(selectedFaculty, selectedDepartment);
-      } else {
-        alert("Error adding teacher: " + (data.message || "Unknown error"));
-      }
+
+      const updatedTeachers = [...teachers];
+      updatedTeachers[index].isAdded = true;
+      updatedTeachers[index].unid = unid;
+      setTeachers(updatedTeachers);
+
+      fetchTeachers(selectedFaculty, selectedDepartment);
     } catch (error) {
       console.error("Error adding teacher:", error);
     }
@@ -158,27 +136,15 @@ const TeacherLoad = () => {
     }
   
     try {
-      const response = await fetch(`http://localhost:5000/teacher/${teacher.unid}` || `https://planovate-backend.onrender.com/teacher/${teacher.unid}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          unid: teacher.unid,
-          ID: teacher.id,
-          name: teacher.name,
-        }),
+      await teacherService.upsertTeacher({
+        unid: teacher.unid,
+        ID: teacher.id,
+        name: teacher.name,
+        faculty: selectedFaculty,
+        department: selectedDepartment,
       });
-  
-      const data = await response.json();
-      console.log("API Response (PUT):", data); // Debugging log
-  
-      if (data.success) {
-        alert("Teacher updated successfully!");
-  
-        // Fetch updated teachers
-        fetchTeachers(selectedFaculty, selectedDepartment);
-      } else {
-        alert("Error updating teacher: " + (data.message || "Unknown error"));
-      }
+      alert("Teacher updated successfully!");
+      fetchTeachers(selectedFaculty, selectedDepartment);
     } catch (error) {
       console.error("Error updating teacher:", error);
     }
@@ -193,28 +159,10 @@ const TeacherLoad = () => {
     }
   
     try {
-      const response = await fetch(`http://localhost:5000/teacher/${teacher.unid}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          unid: teacher.unid,
-          ID: teacher.id,
-         }),
-      });
-      console.log(response.body);
-      const data = await response.json();
-      console.log("API Response (DELETE):", data); // Debugging log
-  
-      if (data.success) {
-        alert("Teacher deleted successfully!");
-  
-        // Remove the teacher from the list in the UI
-        const updatedTeachers = teachers.filter((_, i) => i !== index);
-        setTeachers(updatedTeachers);
-      } else {
-        deleteTeacherRow(index);
-        console.log("Error deleting teacher: " + (data.message || "Unknown error"));
-      }
+      await teacherService.deleteTeacher(teacher.unid);
+      alert("Teacher deleted successfully!");
+      const updatedTeachers = teachers.filter((_, i) => i !== index);
+      setTeachers(updatedTeachers);
     } catch (error) {
       console.error("Error deleting teacher:", error);
     }

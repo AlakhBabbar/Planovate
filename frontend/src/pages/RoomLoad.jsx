@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
+import { roomService } from "../firebase/services";
 
 const RoomLoad = () => {
   const [faculties, setFaculties] = useState([]);
@@ -17,17 +18,8 @@ const RoomLoad = () => {
 
   const fetchFaculties = async () => {
     try {
-      const response = await fetch("http://localhost:5000/room/faculty");
-      const data = await response.json();
-  
-      console.log("Faculty API Response:", data);  // Debugging
-  
-      if (data.success && Array.isArray(data.faculties)) {
-        setFaculties(data.faculties); // ✅ Extract the correct array
-      } else {
-        console.error("Error: Expected an array but got:", data);
-        setFaculties([]);  // Prevent crash
-      }
+      const data = await roomService.listFaculties();
+      setFaculties(data);
     } catch (error) {
       console.error("Error fetching faculties:", error);
     }
@@ -36,19 +28,8 @@ const RoomLoad = () => {
 
   const fetchRooms = async (faculty) => {
     try {
-        console.log("Fetching rooms for faculty:", faculty);
-        
-        const response = await fetch(`http://localhost:5000/room/fetchRooms?faculty=${faculty}`);
-        const data = await response.json();
-
-        console.log("Rooms API Response:", data);  // ✅ Debugging log
-
-        if (data.success && Array.isArray(data.rooms)) {
-            setRooms(data.rooms.map(room => ({ ...room, isAdded: true })));
-        } else {
-            console.error("Error: Expected an array but got:", data);
-            setRooms([]);  
-        }
+    const data = await roomService.listRooms({ faculty });
+    setRooms(data.map((room) => ({ ...room, isAdded: true })));
     } catch (error) {
         console.error("Error fetching rooms:", error);
     }
@@ -64,22 +45,15 @@ const RoomLoad = () => {
       return alert("At least one room must be added before saving the faculty!");
     }
     try {
-      const response = await fetch("http://localhost:5000/teacher/faculty", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newFaculty }),
-      });
-      const data = await response.json();
-      if (data.success) {
-        alert("Faculty added successfully!");
+      // Faculties are derived from rooms in Firestore; we keep the UX by adding
+      // it locally and persisting once at least one room is saved under it.
+      if (!faculties.includes(newFaculty)) {
         setFaculties([...faculties, newFaculty]);
-        setSelectedFaculty(newFaculty);
-        setNewFaculty("");
-        setIsAddingFaculty(false);
-        setIsFacultyEntered(true);
-      } else {
-        alert("Error adding faculty: " + data.error);
       }
+      setSelectedFaculty(newFaculty);
+      setNewFaculty("");
+      setIsAddingFaculty(false);
+      setIsFacultyEntered(true);
     } catch (error) {
       console.error("Error adding faculty:", error);
     }
@@ -129,6 +103,7 @@ const RoomLoad = () => {
     setRooms([
       ...rooms,
       {
+        unid: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         ID: "",
         name: "",
         capacity: "",
@@ -165,54 +140,25 @@ const RoomLoad = () => {
       }
       
   
-    // ✅ Convert availability into correct backend format
-    const formattedAvailability = {
-      day: {
-        mon: { time: room.availability.day.mon.time },
-        tue: { time: room.availability.day.tue.time },
-        wed: { time: room.availability.day.wed.time },
-        thu: { time: room.availability.day.thu.time },
-        fri: { time: room.availability.day.fri.time },
-        sat: { time: room.availability.day.sat.time },
-      }
-    };
-  
     try {
-      const response = await fetch("http://localhost:5000/room", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          unid: Date.now(), // Generate unique ID
-          ID: room.ID,
-          name: room.name,
-          capacity: parseInt(room.capacity, 10),
-
-          faculty: selectedFaculty,
-          availability: formattedAvailability, // ✅ Store availability correctly
-        }),
+      const unid = await roomService.upsertRoom({
+        unid: room.unid,
+        ID: room.ID,
+        name: room.name,
+        capacity: parseInt(room.capacity, 10),
+        faculty: selectedFaculty,
+        availability: room.availability,
       });
-  
-      const data = await response.json();
-      console.log(data);
-  
-      if (data.createRoom) {
-        console.log("Room added successfully!");
-  
-        // ✅ Mark row as saved
-        const updatedRooms = [...rooms];
-        updatedRooms[index].isAdded = true;
-        updatedRooms[index].unid = data.unid; // Store unique ID from backend
-        setRooms(updatedRooms);
-  
-        // ✅ Fetch updated rooms from the backend
-        fetchRooms(selectedFaculty);
-  
-        // ✅ If a new faculty was being added, save it
-        if (isAddingFaculty) {
-          addFaculty();
-        }
-      } else {
-        alert("Error adding room: " + data.message);
+
+      const updatedRooms = [...rooms];
+      updatedRooms[index].isAdded = true;
+      updatedRooms[index].unid = unid;
+      setRooms(updatedRooms);
+
+      await fetchRooms(selectedFaculty);
+
+      if (isAddingFaculty) {
+        addFaculty();
       }
     } catch (error) {
       console.error("Error saving room:", error);
@@ -228,40 +174,18 @@ const RoomLoad = () => {
         return alert("All fields (Room ID, Name, Capacity) must be filled!");
     }
     
-    // ✅ Format availability data properly for backend
-    const formattedAvailability = {
-        day: {
-            mon: { time: room.availability.day.mon.time },
-            tue: { time: room.availability.day.tue.time },
-            wed: { time: room.availability.day.wed.time },
-            thu: { time: room.availability.day.thu.time },
-            fri: { time: room.availability.day.fri.time },
-            sat: { time: room.availability.day.sat.time },
-        }
-    };
-
     try {
-        const response = await fetch(`http://localhost:5000/room/${room.unid}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                ID: room.ID,
-                name: room.name,
-                capacity: room.capacity,
-                faculty: selectedFaculty,
-                availability: room.availability,
-            }),
-        });
+      await roomService.upsertRoom({
+        unid: room.unid,
+        ID: room.ID,
+        name: room.name,
+        capacity: room.capacity,
+        faculty: selectedFaculty,
+        availability: room.availability,
+      });
 
-        const data = await response.json();
-        console.log("Update Response:", data);  // ✅ Debug log
-
-        if (data.success) {
             alert("Room updated successfully!");
             fetchRooms(selectedFaculty);  // ✅ Refresh the room list
-        } else {
-            alert("Error updating room: " + data.message);
-        }
     } catch (error) {
         console.error("Error updating room:", error);
     }
@@ -271,21 +195,10 @@ const deleteRoom = async (index) => {
     const room = rooms[index];
 
     try {
-        const response = await fetch(`http://localhost:5000/room/${room.unid}`, {
-            method: "DELETE",
-        });
-
-        const data = await response.json();
-
-        if (data.deleteRoom) {
-            alert("Room deleted successfully!");
-
-            // ✅ Remove room from frontend state immediately
-            const updatedRooms = rooms.filter((_, i) => i !== index);
-            setRooms(updatedRooms);
-        } else {
-            alert("Error deleting room: " + data.message);
-        }
+    await roomService.deleteRoom(room.unid);
+    alert("Room deleted successfully!");
+    const updatedRooms = rooms.filter((_, i) => i !== index);
+    setRooms(updatedRooms);
     } catch (error) {
         console.error("Error deleting room:", error);
     }

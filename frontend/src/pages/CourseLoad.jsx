@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Layout from "../components/Layout";
+import { courseService, teacherService } from "../firebase/services";
 
 const CourseLoad = () => {
   const [faculties, setFaculties] = useState([]);
@@ -24,8 +25,7 @@ const CourseLoad = () => {
 
   const fetchFaculties = async () => {
     try {
-      const response = await fetch("http://localhost:5000/teacher/faculty");
-      const data = await response.json();
+      const data = await teacherService.listFaculties();
       setFaculties(data);
     } catch (error) {
       console.error("Error fetching faculties:", error);
@@ -34,8 +34,7 @@ const CourseLoad = () => {
 
   const fetchDepartments = async (faculty) => {
     try {
-      const response = await fetch(`http://localhost:5000/teacher/department?faculty=${faculty}`);
-      const data = await response.json();
+      const data = await teacherService.listDepartments(faculty);
       setDepartments(data);
       setSelectedDepartment("");
     } catch (error) {
@@ -45,8 +44,7 @@ const CourseLoad = () => {
 
   const fetchSemesters = async (faculty, department) => {
     try {
-      const response = await fetch(`http://localhost:5000/course/semester?faculty=${faculty}&department=${department}`);
-      const data = await response.json();
+      const data = await courseService.listSemesters({ faculty, department });
       setSemesters(data);
       setSelectedSemester("");
     } catch (error) {
@@ -56,8 +54,7 @@ const CourseLoad = () => {
 
   const fetchTeachers = async (faculty, department) => {
     try {
-      const response = await fetch(`http://localhost:5000/teacher?faculty=${faculty}&department=${department}`);
-      const data = await response.json();
+      const data = await teacherService.listTeachers({ faculty, department });
       setTeachers(data);
     } catch (error) {
       console.error("Error fetching teachers:", error);
@@ -75,18 +72,13 @@ const CourseLoad = () => {
 
   const fetchCourses = async (faculty, department, semester) => {
     try {
-      const response = await fetch(`http://localhost:5000/course/fetchCourse?faculty=${faculty}&department=${department}&semester=${semester}`);
-      const data = await response.json();
+      const data = await courseService.listCourses({ faculty, department, semester });
       fetchTeachers(faculty, department);
-      // setCourses(data);
-      console.log("Courses:", data); // ✅ Debugging log
-      // ✅ Ensure that fetched courses retain the isAdded flag
-    const updatedCourses = data.map(course => ({
-      ...course,
-      isAdded: true, // Mark as added so button shows "UPDATE"
-    }));
-
-    setCourses(updatedCourses);
+      const updatedCourses = data.map((course) => ({
+        ...course,
+        isAdded: true,
+      }));
+      setCourses(updatedCourses);
     } catch (error) {
       console.error("Error fetching courses:", error);
     }
@@ -105,39 +97,24 @@ const CourseLoad = () => {
       return alert("Please enter Course ID and Name!");
     }
   
-    console.log("Sending Course Data:", course); // ✅ Debugging log
-  
     try {
-      const response = await fetch("http://localhost:5000/course", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ID: course.ID,
-          name: course.name,
-          unid: course.unid,
-          code: course.code,
-          credits: course.credits,
-          teachers: course.teachers,
-          faculty: selectedFaculty,
-          semester: selectedSemester,
-          department: selectedDepartment,
-        }),
+      const unid = await courseService.upsertCourse({
+        unid: course.unid,
+        ID: course.ID,
+        name: course.name,
+        code: course.code,
+        credits: course.credits,
+        teachers: course.teachers,
+        faculty: selectedFaculty,
+        semester: selectedSemester,
+        department: selectedDepartment,
       });
-  
-      const data = await response.json();
-      console.log("API Response (POST):", data); // ✅ Debugging log
-  
-      if (data.success) {
-        console.log("Course added successfully!");
-        
-        const updatedCourses = [...courses];
-        updatedCourses[index].isAdded = true;
-        updatedCourses[index].unid = data.unid;
-        setCourses(updatedCourses);
-        fetchCourses(selectedFaculty, selectedDepartment, selectedSemester); // Reload courses
-      } else {
-        alert("Error adding course: " + data.error);
-      }
+
+      const updatedCourses = [...courses];
+      updatedCourses[index].isAdded = true;
+      updatedCourses[index].unid = unid;
+      setCourses(updatedCourses);
+      fetchCourses(selectedFaculty, selectedDepartment, selectedSemester);
     } catch (error) {
       console.error("Error adding course:", error);
     }
@@ -147,28 +124,19 @@ const CourseLoad = () => {
   const updateCourse = async (index) => {
     const course = courses[index];
     try {
-        const response = await fetch(`http://localhost:5000/course/${course.unid}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                unid: course.unid,
-                ID: course.ID,
-                name: course.name,
-                code: course.code,
-                credits: course.credits,
-                teachers: course.teachers,
-                faculty: selectedFaculty,
-                semester: selectedSemester,
-                department: selectedDepartment,
-            }),
-        });
-        const data = await response.json();
-        if (data.success) {
-            alert("Course updated successfully!");
-            fetchCourses(selectedFaculty, selectedDepartment, selectedSemester);
-        } else {
-            alert("Error updating course: " + data.message);
-        }
+      await courseService.upsertCourse({
+        unid: course.unid,
+        ID: course.ID,
+        name: course.name,
+        code: course.code,
+        credits: course.credits,
+        teachers: course.teachers,
+        faculty: selectedFaculty,
+        semester: selectedSemester,
+        department: selectedDepartment,
+      });
+      alert("Course updated successfully!");
+      fetchCourses(selectedFaculty, selectedDepartment, selectedSemester);
     } catch (error) {
         console.error("Error updating course:", error);
     }
@@ -178,24 +146,11 @@ const deleteCourse = async (index) => {
   const course = courses[index];
 
   try {
-      const response = await fetch(`http://localhost:5000/course/${course.unid}`, {
-          method: "DELETE",
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-          alert("Course deleted successfully!");
-
-          // ✅ Remove course from local state immediately
-          const updatedCourses = courses.filter((_, i) => i !== index);
-          setCourses(updatedCourses);
-
-          // ✅ Fetch updated list (optional, but ensures consistency)
-          fetchCourses(selectedFaculty, selectedDepartment, selectedSemester);
-      } else {
-          alert("else Error deleting course: " + data.message);
-      }
+      await courseService.deleteCourse(course.unid);
+      alert("Course deleted successfully!");
+      const updatedCourses = courses.filter((_, i) => i !== index);
+      setCourses(updatedCourses);
+      fetchCourses(selectedFaculty, selectedDepartment, selectedSemester);
   } catch (error) {
       console.error("Error deleting course:", error);
   }
@@ -342,24 +297,42 @@ const deleteCourse = async (index) => {
                       style={{ maxHeight: "200px", overflowY: "auto" }} // Scroll enabled
                       >
                         <h3 className="text-sm font-bold mb-2">Select Teachers</h3>
-                        {teachers.map((teacher, idx) => (
-                          <label key={idx} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={course.teachers.includes(teacher)}
-                            onChange={(e) => {
-                              let updatedTeachers = [...course.teachers];
-                              if (e.target.checked) {
-                                updatedTeachers.push(teacher);
-                              } else {
-                                updatedTeachers = updatedTeachers.filter(t => t !== teacher);
-                              }
-                              updateCourseField(index, "teachers", updatedTeachers);
-                            }}
-                          />
-                          {teacher}
-                          </label>
-                        ))}
+                        {teachers.map((teacher, idx) => {
+                          const teacherKey =
+                            typeof teacher === "string"
+                              ? teacher
+                              : (teacher?.unid ?? teacher?.ID ?? teacher?.name ?? "");
+                          const teacherLabel =
+                            typeof teacher === "string"
+                              ? teacher
+                              : (teacher?.name ?? teacher?.ID ?? teacher?.unid ?? "Unknown");
+                          const selectedTeachers = Array.isArray(course.teachers)
+                            ? course.teachers
+                            : [];
+
+                          return (
+                            <label key={teacherKey || idx} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={teacherKey ? selectedTeachers.includes(teacherKey) : false}
+                                onChange={(e) => {
+                                  let updatedTeachers = [...selectedTeachers];
+                                  if (!teacherKey) return;
+
+                                  if (e.target.checked) {
+                                    if (!updatedTeachers.includes(teacherKey)) {
+                                      updatedTeachers.push(teacherKey);
+                                    }
+                                  } else {
+                                    updatedTeachers = updatedTeachers.filter((t) => t !== teacherKey);
+                                  }
+                                  updateCourseField(index, "teachers", updatedTeachers);
+                                }}
+                              />
+                              {teacherLabel}
+                            </label>
+                          );
+                        })}
                         <button
                           className="mt-2 p-1 bg-red-500 text-white rounded w-full text-sm"
                           onClick={() => setSelectedCourseIndex(null)}
