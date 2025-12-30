@@ -42,6 +42,12 @@ const Timetable = () => {
   
   // Track loaded metadata per tab to prevent refetching on tab switch
   const loadedMetadataRef = useRef({});
+  
+  // Refs for keyboard navigation
+  const classInputRef = useRef(null);
+  const branchInputRef = useRef(null);
+  const semesterInputRef = useRef(null);
+  const firstCellRef = useRef(null);
 
   // Helper function to find if a timetable is already open in any tab
   const findTabWithMetadata = (className, branch, semester) => {
@@ -215,7 +221,30 @@ const Timetable = () => {
 
   const stats = calculateConflictStats(conflicts);
 
+  // Keyboard navigation handlers
+  const handleClassKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      branchInputRef.current?.focus();
+    }
+  };
 
+  const handleBranchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      semesterInputRef.current?.focus();
+    }
+  };
+
+  const handleSemesterKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // Focus first cell input after a short delay to ensure table is rendered
+      setTimeout(() => {
+        firstCellRef.current?.focus();
+      }, 100);
+    }
+  };
 
   const addTable = () => {
     const newTable = generateUniqueTableId();
@@ -351,6 +380,7 @@ const Timetable = () => {
           </h3>
           <div className="flex gap-3 items-center flex-wrap">
             <input
+              ref={classInputRef}
               type="text"
               placeholder="Class"
               className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
@@ -359,9 +389,11 @@ const Timetable = () => {
                 ...prev,
                 [activeTable]: { ...prev[activeTable], className: e.target.value }
               }))}
+              onKeyDown={handleClassKeyDown}
               disabled={isLoadingExisting}
             />
             <input
+              ref={branchInputRef}
               type="text"
               placeholder="Branch/Batch"
               className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
@@ -370,15 +402,18 @@ const Timetable = () => {
                 ...prev,
                 [activeTable]: { ...prev[activeTable], branch: e.target.value }
               }))}
+              onKeyDown={handleBranchKeyDown}
               disabled={isLoadingExisting}
             />
             <select
+              ref={semesterInputRef}
               className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
               value={tabMetadata[activeTable]?.semester || ""}
               onChange={(e) => setTabMetadata(prev => ({
                 ...prev,
                 [activeTable]: { ...prev[activeTable], semester: e.target.value }
               }))}
+              onKeyDown={handleSemesterKeyDown}
               disabled={isLoadingExisting}
             >
               <option value="">Select Semester</option>
@@ -422,6 +457,7 @@ const Timetable = () => {
           roomOptions={roomOptions}
           onCreateBatch={createBatch}
           onUpdateBatch={updateBatch}
+          firstCellRef={firstCellRef}
         />
 
         {/* Add Time Slot Button */}

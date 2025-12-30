@@ -10,7 +10,8 @@ const TimetableTable = ({
   teacherOptions,
   roomOptions,
   onCreateBatch, 
-  onUpdateBatch 
+  onUpdateBatch,
+  firstCellRef
 }) => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -51,6 +52,8 @@ const TimetableTable = ({
                   roomOptions={roomOptions}
                   onCreateBatch={onCreateBatch}
                   onUpdateBatch={onUpdateBatch}
+                  isFirstCell={rowIndex === 0 && colIndex === 0}
+                  firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}
                 />
               ))}
             </tr>
