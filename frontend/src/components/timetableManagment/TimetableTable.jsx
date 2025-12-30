@@ -6,6 +6,9 @@ const TimetableTable = ({
   batches,
   batchData,
   conflicts, 
+  courseOptions,
+  teacherOptions,
+  roomOptions,
   onCreateBatch, 
   onUpdateBatch 
 }) => {
@@ -43,6 +46,9 @@ const TimetableTable = ({
                   batches={batches}
                   batchData={batchData}
                   conflicts={conflicts}
+                  courseOptions={courseOptions}
+                  teacherOptions={teacherOptions}
+                  roomOptions={roomOptions}
                   onCreateBatch={onCreateBatch}
                   onUpdateBatch={onUpdateBatch}
                 />

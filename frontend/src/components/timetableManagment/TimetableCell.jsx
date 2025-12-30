@@ -7,6 +7,9 @@ const TimetableCell = ({
   batches,
   batchData,
   conflicts, 
+  courseOptions,
+  teacherOptions,
+  roomOptions,
   onCreateBatch, 
   onUpdateBatch 
 }) => {
@@ -14,10 +17,9 @@ const TimetableCell = ({
   const batchCount = batches[key] || 1;
   const showBatchField = batchCount > 1;
 
-  // Mock data for dropdowns
-  const courses = ["Math 101", "Physics 201", "Chemistry 301"];
-  const teachers = ["Dr. Smith", "Prof. Johnson", "Dr. Williams"];
-  const rooms = ["Room A1", "Room B2", "Room C3"];
+  const courses = Array.isArray(courseOptions) ? courseOptions : [];
+  const teachers = Array.isArray(teacherOptions) ? teacherOptions : [];
+  const rooms = Array.isArray(roomOptions) ? roomOptions : [];
 
   return (
     <td className="border border-gray-200 p-0 min-w-[140px] bg-white align-top relative group">
