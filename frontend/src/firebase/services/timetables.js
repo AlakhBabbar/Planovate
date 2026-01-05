@@ -88,6 +88,15 @@ export async function saveTimetable({
 
   // Use utility function to build schedule occurrences
   // Tables are derived from batchesByTable keys
+  console.log('🔍 Building schedules with:', {
+    timetableId,
+    tables: Object.keys(batchesByTable || {}),
+    batchesByTable,
+    batchDataByTable,
+    daysCount: payload.days?.length,
+    timeSlotsCount: payload.timeSlots?.length
+  });
+  
   const schedules = buildScheduleOccurrences({
     timetableId,
     meta: payload,
@@ -97,6 +106,9 @@ export async function saveTimetable({
     batchesByTable,
     batchDataByTable,
   });
+
+  console.log('📋 Built schedules:', schedules.length, 'occurrences');
+  console.log('📋 Sample schedule:', schedules[0]);
 
   // Save new schedules (intelligently updates existing entries)
   await saveSchedules({ timetableId, schedules });

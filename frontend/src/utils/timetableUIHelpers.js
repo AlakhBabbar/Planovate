@@ -22,9 +22,9 @@ export const DEFAULT_TIME_SLOTS = [
 /**
  * Checks if an existing timetable exists and returns it
  */
-export async function checkExistingTimetable(className, branch, semester, timetableService) {
+export async function checkExistingTimetable(className, branch, semester, type, timetableService) {
   // Only check if all three fields are filled
-  if (!className?.trim() || !branch?.trim() || !semester?.trim()) {
+  if (!className?.trim() || !branch?.trim() || !semester?.trim() || !type?.trim()) {
     return null;
   }
 
@@ -33,6 +33,7 @@ export async function checkExistingTimetable(className, branch, semester, timeta
       class: className,
       branch: branch,
       semester: semester,
+      type: type,
     });
 
     const existingTimetable = await timetableService.loadTimetable(timetableId);

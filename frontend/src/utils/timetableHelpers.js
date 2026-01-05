@@ -21,10 +21,11 @@ export function generateTimetableId(meta) {
   const cls = safeId(meta?.class);
   const br = safeId(meta?.branch);
   const sem = safeId(meta?.semester);
-  if (!cls || !br || !sem) {
-    throw new Error("Timetable requires class, branch, and semester");
+  const tp = safeId(meta?.type);
+  if (!cls || !br || !sem || !tp) {
+    throw new Error("Timetable requires class, branch, and semester and type");
   }
-  return `tt_${cls}__${br}__${sem}`;
+  return `tt_${cls}__${br}__${sem}__${tp}`;
 }
 
 /**
@@ -40,28 +41,55 @@ export function buildScheduleOccurrences({
   batchesByTable,
   batchDataByTable,
 }) {
+  console.log('📦 buildScheduleOccurrences called with:', {
+    timetableId,
+    tablesProvided: tables,
+    daysCount: days?.length,
+    timeSlotsCount: timeSlots?.length,
+    batchesByTableKeys: Object.keys(batchesByTable ?? {}),
+    batchDataByTableKeys: Object.keys(batchDataByTable ?? {})
+  });
+  
   const normalizedDays = (days?.length ? days : DEFAULT_DAYS).map(normalize);
   const normalizedSlots = (timeSlots ?? []).map(normalize);
   const tableIds = tables?.length ? tables : Object.keys(batchesByTable ?? {});
+
+  console.log('📋 Processing tables:', tableIds);
 
   const occurrences = [];
 
   for (const tableId of tableIds) {
     const batchesForTable = batchesByTable?.[tableId] ?? {};
     const dataForTable = batchDataByTable?.[tableId] ?? {};
+    
+    console.log(`🔍 Processing table "${tableId}":`, {
+      batchesForTable,
+      dataForTable,
+      batchesKeys: Object.keys(batchesForTable),
+      dataKeys: Object.keys(dataForTable)
+    });
 
     for (let rowIndex = 0; rowIndex < normalizedSlots.length; rowIndex += 1) {
       for (let colIndex = 0; colIndex < normalizedDays.length; colIndex += 1) {
         const count = getBatchCount(batchesForTable, rowIndex, colIndex);
         for (let batchIndex = 0; batchIndex < count; batchIndex += 1) {
-          const entry = dataForTable?.[dataKey(rowIndex, colIndex, batchIndex)] ?? {};
+          const key = dataKey(rowIndex, colIndex, batchIndex);
+          const entry = dataForTable?.[key] ?? {};
+          console.log(`🔎 Looking for data at key "${key}":`, entry);
+          
           const course = normalize(entry.course);
           const teacher = normalize(entry.teacher);
           const room = normalize(entry.room);
           const batch = normalize(entry.batchName);
 
           // Skip truly empty blocks to keep the DB clean
-          if (!course && !teacher && !room && !batch) continue;
+          if (!course && !teacher && !room && !batch) {
+            console.log(`⏭️ Skipping empty cell: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}]`);
+            continue;
+          }
+          
+          console.log(`✅ Adding schedule: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}] - ${course || '(no course)'}`);
+
 
           occurrences.push({
             timetableId,
@@ -76,11 +104,19 @@ export function buildScheduleOccurrences({
             batch,
             course,
             teacher,
+            type: normalize(meta?.type),
             room,
           });
         }
       }
     }
+  }
+
+  console.log(`📊 Total occurrences built: ${occurrences.length}`);
+  if (occurrences.length > 0) {
+    console.log('📊 First occurrence:', occurrences[0]);
+  } else {
+    console.warn('⚠️ No occurrences were built! Check if batchData has any entries.');
   }
 
   return occurrences;
@@ -131,6 +167,7 @@ export function prepareTimetablePayload(meta, days, timeSlots) {
     faculty: normalize(meta?.faculty),
     department: normalize(meta?.department),
     semester: normalize(meta?.semester),
+    type: normalize(meta?.type),
     days: (days?.length ? days : DEFAULT_DAYS).map(normalize),
     timeSlots: (timeSlots ?? []).map(normalize),
   };

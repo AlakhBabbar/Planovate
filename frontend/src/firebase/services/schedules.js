@@ -59,6 +59,7 @@ export async function deleteSchedulesByTimetableId(timetableId) {
  */
 export async function saveSchedules({ timetableId, schedules }) {
   const list = Array.isArray(schedules) ? schedules : [];
+  console.log('💾 saveSchedules called with:', { timetableId, schedulesCount: list.length });
   if (!timetableId) throw new Error("timetableId is required");
 
   // Get all existing schedules for this timetable
@@ -107,6 +108,7 @@ export async function saveSchedules({ timetableId, schedules }) {
           course: normalize(s.course),
           teacher: normalize(s.teacher),
           room: normalize(s.room),
+          type: normalize(s.type),
           updatedAt: serverTimestamp(),
         },
         { merge: true }

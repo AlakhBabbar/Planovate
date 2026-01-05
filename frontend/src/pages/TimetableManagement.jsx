@@ -2,7 +2,10 @@ import React, { useEffect, useState, useRef } from "react";
 import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import TimetableTable from "../components/timetableManagment/TimetableTable";import BrowseTimetablesModal from "../components/timetableManagment/BrowseTimetablesModal";import { checkConflicts } from "../utils/Conflict";
+import TimetableTable from "../components/timetableManagment/TimetableTable";
+import BrowseTimetablesModal from "../components/timetableManagment/BrowseTimetablesModal";
+import TimetableInfoForm from "../components/timetableManagment/TimetableInfoForm";
+import { checkConflicts } from "../utils/Conflict";
 import useTimetableStore from "../store/timetableStore";
 import {
   checkExistingTimetable,
@@ -27,9 +30,9 @@ const Timetable = () => {
   const [tables, setTables] = useState(() => [generateUniqueTableId()]);
   const [activeTable, setActiveTable] = useState(() => tables[0]);
   
-  // Per-tab metadata: each tab has its own class, branch, semester
+  // Per-tab metadata: each tab has its own class, branch, semester, type
   const [tabMetadata, setTabMetadata] = useState(() => ({
-    [tables[0]]: { className: "", branch: "", semester: "", timetableId: "" }
+    [tables[0]]: { className: "", branch: "", semester: "", type: "", timetableId: "" }
   }));
   
   const [isLoadingExisting, setIsLoadingExisting] = useState(false);
@@ -47,15 +50,17 @@ const Timetable = () => {
   const classInputRef = useRef(null);
   const branchInputRef = useRef(null);
   const semesterInputRef = useRef(null);
+  const typeInputRef = useRef(null);
   const firstCellRef = useRef(null);
 
   // Helper function to find if a timetable is already open in any tab
-  const findTabWithMetadata = (className, branch, semester) => {
+  const findTabWithMetadata = (className, branch, semester, type) => {
     return tables.find(tab => {
       const meta = tabMetadata[tab];
       return meta?.className?.trim() === className?.trim() &&
              meta?.branch?.trim() === branch?.trim() &&
-             meta?.semester?.trim() === semester?.trim();
+             meta?.semester?.trim() === semester?.trim() &&
+             meta?.type?.trim() === type?.trim();
     });
   };
 
@@ -70,17 +75,17 @@ const Timetable = () => {
 
     const loadExisting = async () => {
       const currentMeta = tabMetadata[activeTable];
-      if (!currentMeta?.className?.trim() || !currentMeta?.branch?.trim() || !currentMeta?.semester?.trim()) {
+      if (!currentMeta?.className?.trim() || !currentMeta?.branch?.trim() || !currentMeta?.semester?.trim() || !currentMeta?.type?.trim()) {
         return;
       }
 
       // Check if this timetable is already open in another tab
-      const existingTab = findTabWithMetadata(currentMeta.className, currentMeta.branch, currentMeta.semester);
+      const existingTab = findTabWithMetadata(currentMeta.className, currentMeta.branch, currentMeta.semester, currentMeta.type);
       if (existingTab && existingTab !== activeTable) {
         // Clear input fields in current tab before switching
         setTabMetadata(prev => ({
           ...prev,
-          [activeTable]: { className: "", branch: "", semester: "", timetableId: "" }
+          [activeTable]: { className: "", branch: "", semester: "", type: "", timetableId: "" }
         }));
         // Switch to the existing tab instead of loading again
         setActiveTable(existingTab);
@@ -88,7 +93,7 @@ const Timetable = () => {
       }
 
       // Check if we've already loaded this exact metadata for this tab
-      const metaKey = `${activeTable}-${currentMeta.className}-${currentMeta.branch}-${currentMeta.semester}`;
+      const metaKey = `${activeTable}-${currentMeta.className}-${currentMeta.branch}-${currentMeta.semester}-${currentMeta.type}`;
       if (loadedMetadataRef.current[metaKey]) {
         return; // Skip fetch if already loaded
       }
@@ -99,6 +104,7 @@ const Timetable = () => {
         currentMeta.className,
         currentMeta.branch,
         currentMeta.semester,
+        currentMeta.type,
         timetableService
       );
       
@@ -137,17 +143,17 @@ const Timetable = () => {
       cancelled = true;
       clearTimeout(timeoutId);
     };
-  }, [tabMetadata[activeTable]?.className, tabMetadata[activeTable]?.branch, tabMetadata[activeTable]?.semester]);
+  }, [tabMetadata[activeTable]?.className, tabMetadata[activeTable]?.branch, tabMetadata[activeTable]?.semester, tabMetadata[activeTable]?.type]);
 
   const handleLoadSelectedTimetable = async (timetable) => {
     try {
       // Check if this timetable is already open in another tab
-      const existingTab = findTabWithMetadata(timetable.class, timetable.branch, timetable.semester);
+      const existingTab = findTabWithMetadata(timetable.class, timetable.branch, timetable.semester, timetable.type);
       if (existingTab) {
         // Clear input fields in current tab before switching
         setTabMetadata(prev => ({
           ...prev,
-          [activeTable]: { className: "", branch: "", semester: "", timetableId: "" }
+          [activeTable]: { className: "", branch: "", semester: "", type: "", timetableId: "" }
         }));
         // Switch to the existing tab and close modal
         setActiveTable(existingTab);
@@ -165,6 +171,7 @@ const Timetable = () => {
             className: timetable.class || "",
             branch: timetable.branch || "",
             semester: timetable.semester || "",
+            type: timetable.type || "",
             timetableId: timetable.timetableId
           }
         }));
@@ -239,6 +246,13 @@ const Timetable = () => {
   const handleSemesterKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
+      typeInputRef.current?.focus();
+    }
+  };
+
+  const handleTypeKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
       // Focus first cell input after a short delay to ensure table is rendered
       setTimeout(() => {
         firstCellRef.current?.focus();
@@ -253,7 +267,7 @@ const Timetable = () => {
     // Initialize metadata for new tab
     setTabMetadata(prev => ({
       ...prev,
-      [newTable]: { className: "", branch: "", semester: "", timetableId: "" }
+      [newTable]: { className: "", branch: "", semester: "", type: "", timetableId: "" }
     }));
   };
 
@@ -277,17 +291,31 @@ const Timetable = () => {
 
   const saveToFirestore = async () => {
     const currentMeta = tabMetadata[activeTable];
-    if (!currentMeta?.className?.trim() || !currentMeta?.branch?.trim() || !currentMeta?.semester?.trim()) {
-      alert("Please fill in Class, Branch, and Semester fields");
+    if (!currentMeta?.className?.trim() || !currentMeta?.branch?.trim() || !currentMeta?.semester?.trim() || !currentMeta?.type?.trim()) {
+      alert("Please fill in Class, Branch, Semester, and Type fields");
       return;
     }
 
     try {
+      console.log('🚀 Saving timetable with data:', {
+        meta: {
+          class: currentMeta.className,
+          branch: currentMeta.branch,
+          semester: currentMeta.semester,
+          type: currentMeta.type,
+        },
+        tables,
+        timeSlots,
+        batches,
+        batchData
+      });
+      
       const id = await timetableService.saveTimetable({
         meta: {
           class: currentMeta.className,
           branch: currentMeta.branch,
           semester: currentMeta.semester,
+          type: currentMeta.type,
         },
         tables,
         timeSlots,
@@ -372,71 +400,23 @@ const Timetable = () => {
           </button>
         </div>
 
-        {/* Course, Branch, Semester Inputs */}
-        <div className="bg-white rounded-lg shadow border border-gray-200 p-5 mb-6">
-          <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
-            <BookOpen size={20} className="text-blue-600" />
-            <span>Timetable Information</span>
-          </h3>
-          <div className="flex gap-3 items-center flex-wrap">
-            <input
-              ref={classInputRef}
-              type="text"
-              placeholder="Class"
-              className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
-              value={tabMetadata[activeTable]?.className || ""}
-              onChange={(e) => setTabMetadata(prev => ({
-                ...prev,
-                [activeTable]: { ...prev[activeTable], className: e.target.value }
-              }))}
-              onKeyDown={handleClassKeyDown}
-              disabled={isLoadingExisting}
-            />
-            <input
-              ref={branchInputRef}
-              type="text"
-              placeholder="Branch/Batch"
-              className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
-              value={tabMetadata[activeTable]?.branch || ""}
-              onChange={(e) => setTabMetadata(prev => ({
-                ...prev,
-                [activeTable]: { ...prev[activeTable], branch: e.target.value }
-              }))}
-              onKeyDown={handleBranchKeyDown}
-              disabled={isLoadingExisting}
-            />
-            <select
-              ref={semesterInputRef}
-              className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
-              value={tabMetadata[activeTable]?.semester || ""}
-              onChange={(e) => setTabMetadata(prev => ({
-                ...prev,
-                [activeTable]: { ...prev[activeTable], semester: e.target.value }
-              }))}
-              onKeyDown={handleSemesterKeyDown}
-              disabled={isLoadingExisting}
-            >
-              <option value="">Select Semester</option>
-              {semesterOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => setShowBrowseModal(true)}
-              className="px-5 py-2.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-all duration-300 shadow whitespace-nowrap font-medium text-sm flex items-center gap-2"
-            >
-              <FolderSearch size={16} />
-              Browse
-            </button>
-            {isLoadingExisting && (
-              <div className="flex items-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-3 border-blue-500 border-t-transparent"></div>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Timetable Information Form */}
+        <TimetableInfoForm
+          activeTable={activeTable}
+          tabMetadata={tabMetadata}
+          setTabMetadata={setTabMetadata}
+          semesterOptions={semesterOptions}
+          isLoadingExisting={isLoadingExisting}
+          onBrowseClick={() => setShowBrowseModal(true)}
+          classInputRef={classInputRef}
+          branchInputRef={branchInputRef}
+          semesterInputRef={semesterInputRef}
+          typeInputRef={typeInputRef}
+          handleClassKeyDown={handleClassKeyDown}
+          handleBranchKeyDown={handleBranchKeyDown}
+          handleSemesterKeyDown={handleSemesterKeyDown}
+          handleTypeKeyDown={handleTypeKeyDown}
+        />
 
         {/* Browse Timetables Modal */}
         <BrowseTimetablesModal
