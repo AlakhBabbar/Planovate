@@ -297,6 +297,15 @@ const Timetable = () => {
     }
 
     try {
+      // Get the active table's data with proper table name
+      const tableName = generateTableName(activeTable, tables);
+      const batchesByTable = {
+        [tableName]: batches[activeTable] || {}
+      };
+      const batchDataByTable = {
+        [tableName]: batchData[activeTable] || {}
+      };
+      
       console.log('🚀 Saving timetable with data:', {
         meta: {
           class: currentMeta.className,
@@ -304,10 +313,10 @@ const Timetable = () => {
           semester: currentMeta.semester,
           type: currentMeta.type,
         },
-        tables,
+        tableName,
         timeSlots,
-        batches,
-        batchData
+        batchesByTable,
+        batchDataByTable
       });
       
       const id = await timetableService.saveTimetable({
@@ -317,11 +326,11 @@ const Timetable = () => {
           semester: currentMeta.semester,
           type: currentMeta.type,
         },
-        tables,
+        tables: [tableName],
         timeSlots,
         days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-        batchesByTable: batches,
-        batchDataByTable: batchData,
+        batchesByTable,
+        batchDataByTable,
       });
 
       setTabMetadata(prev => ({
@@ -336,7 +345,7 @@ const Timetable = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen flex flex-col bg-white">
       <Header />
       
       {/* Floating Teacher & Room Conflict Warnings */}

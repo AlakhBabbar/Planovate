@@ -69,8 +69,8 @@ export function buildScheduleOccurrences({
       dataKeys: Object.keys(dataForTable)
     });
 
-    for (let rowIndex = 0; rowIndex < normalizedSlots.length; rowIndex += 1) {
-      for (let colIndex = 0; colIndex < normalizedDays.length; colIndex += 1) {
+    for (let rowIndex = 0; rowIndex < normalizedDays.length; rowIndex += 1) {
+      for (let colIndex = 0; colIndex < normalizedSlots.length; colIndex += 1) {
         const count = getBatchCount(batchesForTable, rowIndex, colIndex);
         for (let batchIndex = 0; batchIndex < count; batchIndex += 1) {
           const key = dataKey(rowIndex, colIndex, batchIndex);
@@ -97,8 +97,8 @@ export function buildScheduleOccurrences({
             rowIndex,
             colIndex,
             batchIndex,
-            day: normalizedDays[colIndex] ?? "",
-            time: normalizedSlots[rowIndex] ?? "",
+            day: normalizedDays[rowIndex] ?? "",
+            time: normalizedSlots[colIndex] ?? "",
             class: normalize(meta?.class),
             branch: normalize(meta?.branch),
             batch,
