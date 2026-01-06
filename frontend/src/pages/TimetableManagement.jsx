@@ -7,6 +7,7 @@ import BrowseTimetablesModal from "../components/timetableManagment/BrowseTimeta
 import TimetableInfoForm from "../components/timetableManagment/TimetableInfoForm";
 import { checkConflicts } from "../utils/Conflict";
 import useTimetableStore from "../store/timetableStore";
+import { exportTimetableToPdf } from "../utils";
 import {
   checkExistingTimetable,
   calculateConflictStats,
@@ -344,6 +345,42 @@ const Timetable = () => {
     }
   };
 
+  const exportActiveTableToPdf = () => {
+    const currentMeta = tabMetadata[activeTable] ?? {};
+    const tableIndex = Math.max(0, tables.indexOf(activeTable));
+    const tableLabel = `Table ${tableIndex + 1}`;
+
+    const meta = {
+      name: currentMeta?.timetableId || "",
+      class: currentMeta?.className || "",
+      branch: currentMeta?.branch || "",
+      semester: currentMeta?.semester || "",
+      type: currentMeta?.type || "",
+    };
+
+    const fileNameParts = [
+      meta.class,
+      meta.branch,
+      meta.semester,
+      meta.type,
+      tableLabel,
+    ].filter(Boolean);
+
+    exportTimetableToPdf({
+      fileName: fileNameParts.join(" ") || "timetable",
+      meta,
+      tableId: tableLabel,
+      days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+      timeSlots,
+      batchesByTable: {
+        [tableLabel]: batches[activeTable] || {},
+      },
+      batchDataByTable: {
+        [tableLabel]: batchData[activeTable] || {},
+      },
+    });
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
@@ -468,7 +505,11 @@ const Timetable = () => {
             <Save size={16} />
             Save Timetable
           </button>
-          <button className="px-6 py-2.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-all duration-300 shadow font-medium text-sm flex items-center gap-2">
+          <button
+            className="px-6 py-2.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-all duration-300 shadow font-medium text-sm flex items-center gap-2"
+            onClick={exportActiveTableToPdf}
+            type="button"
+          >
             <Download size={16} />
             Export
           </button>

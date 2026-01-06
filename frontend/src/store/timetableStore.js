@@ -55,7 +55,7 @@ const useTimetableStore = create((set, get) => ({
       ).sort((a, b) => a.localeCompare(b));
 
       const teacherOptions = (teachers ?? [])
-        .map((t) => t?.name || t?.ID || t?.unid || "")
+        .map((t) => t?.ID || t?.name || t?.unid || "")
         .filter(Boolean);
 
       const roomOptions = (rooms ?? [])

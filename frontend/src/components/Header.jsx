@@ -10,7 +10,9 @@ const Header = () => {
           <li><a href="/teacher-load" className="hover:underline">Teacher Load</a></li>
           <li><a href="/course-load" className="hover:underline">Course Load</a></li>
           <li><a href="/room-load" className="hover:underline">Room Load</a></li>
+          <li><a href="/curriculum" className="hover:underline">Curriculum</a></li>
           <li><a href="/timetable" className="hover:underline">Timetable</a></li>
+          <li><a href="/bulk-upload" className="hover:underline">Bulk Upload</a></li>
         </ul>
       </nav>
     </header>
