@@ -5,9 +5,10 @@ import Footer from "../components/Footer";
 import TimetableTable from "../components/timetableManagment/TimetableTable";
 import BrowseTimetablesModal from "../components/timetableManagment/BrowseTimetablesModal";
 import TimetableInfoForm from "../components/timetableManagment/TimetableInfoForm";
+import ExportModal from "../components/timetableManagment/ExportModal";
 import { checkConflicts } from "../utils/Conflict";
 import useTimetableStore from "../store/timetableStore";
-import { exportTimetableToPdf } from "../utils";
+import { exportTimetableToPdf, exportTimetablesToDoc, exportTimetablesToExcel, exportTimetablesToPdf } from "../utils";
 import {
   checkExistingTimetable,
   calculateConflictStats,
@@ -43,6 +44,7 @@ const Timetable = () => {
   const [batches, setBatches] = useState({});
   const [batchData, setBatchData] = useState({});
   const [conflicts, setConflicts] = useState({});
+  const [showExportModal, setShowExportModal] = useState(false);
   
   // Track loaded metadata per tab to prevent refetching on tab switch
   const loadedMetadataRef = useRef({});
@@ -345,40 +347,71 @@ const Timetable = () => {
     }
   };
 
-  const exportActiveTableToPdf = () => {
-    const currentMeta = tabMetadata[activeTable] ?? {};
-    const tableIndex = Math.max(0, tables.indexOf(activeTable));
-    const tableLabel = `Table ${tableIndex + 1}`;
-
-    const meta = {
-      name: currentMeta?.timetableId || "",
-      class: currentMeta?.className || "",
-      branch: currentMeta?.branch || "",
-      semester: currentMeta?.semester || "",
-      type: currentMeta?.type || "",
+  const buildExportMetaForTable = (tableKey) => {
+    const m = tabMetadata[tableKey] ?? {};
+    return {
+      name: m?.timetableId || "",
+      class: m?.className || "",
+      branch: m?.branch || "",
+      semester: m?.semester || "",
+      type: m?.type || "",
     };
+  };
 
-    const fileNameParts = [
-      meta.class,
-      meta.branch,
-      meta.semester,
-      meta.type,
-      tableLabel,
-    ].filter(Boolean);
-
-    exportTimetableToPdf({
-      fileName: fileNameParts.join(" ") || "timetable",
-      meta,
+  const buildExportTablePayload = (tableKey) => {
+    const tableIndex = Math.max(0, tables.indexOf(tableKey));
+    const tableLabel = `Table ${tableIndex + 1}`;
+    return {
       tableId: tableLabel,
       days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       timeSlots,
       batchesByTable: {
-        [tableLabel]: batches[activeTable] || {},
+        [tableLabel]: batches[tableKey] || {},
       },
       batchDataByTable: {
-        [tableLabel]: batchData[activeTable] || {},
+        [tableLabel]: batchData[tableKey] || {},
       },
-    });
+    };
+  };
+
+  const handleExportConfirm = ({ format, scope }) => {
+    const tableKeys = scope === "all" ? tables : [activeTable];
+    const tablesPayload = tableKeys.map((k) => buildExportTablePayload(k));
+
+    // For naming, prefer the active table's metadata.
+    const activeMeta = buildExportMetaForTable(activeTable);
+    const baseNameParts = [activeMeta.class, activeMeta.branch, activeMeta.semester, activeMeta.type].filter(Boolean);
+    const baseFileName = baseNameParts.join(" ") || "timetable";
+
+    if (format === "pdf") {
+      if (tablesPayload.length === 1) {
+        exportTimetableToPdf({
+          fileName: baseFileName,
+          meta: activeMeta,
+          ...tablesPayload[0],
+        });
+      } else {
+        exportTimetablesToPdf({
+          fileName: `${baseFileName} (all)`,
+          meta: activeMeta,
+          tables: tablesPayload,
+        });
+      }
+    } else if (format === "excel") {
+      exportTimetablesToExcel({
+        fileName: scope === "all" ? `${baseFileName} (all)` : baseFileName,
+        meta: activeMeta,
+        tables: tablesPayload,
+      });
+    } else if (format === "doc") {
+      exportTimetablesToDoc({
+        fileName: scope === "all" ? `${baseFileName} (all)` : baseFileName,
+        meta: activeMeta,
+        tables: tablesPayload,
+      });
+    }
+
+    setShowExportModal(false);
   };
 
   return (
@@ -472,6 +505,12 @@ const Timetable = () => {
           timetableService={timetableService}
         />
 
+        <ExportModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          onConfirm={handleExportConfirm}
+        />
+
         {/* Timetable Grid */}
         <TimetableTable
           timeSlots={timeSlots}
@@ -507,7 +546,7 @@ const Timetable = () => {
           </button>
           <button
             className="px-6 py-2.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-all duration-300 shadow font-medium text-sm flex items-center gap-2"
-            onClick={exportActiveTableToPdf}
+            onClick={() => setShowExportModal(true)}
             type="button"
           >
             <Download size={16} />

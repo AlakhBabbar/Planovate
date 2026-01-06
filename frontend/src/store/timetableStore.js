@@ -43,7 +43,7 @@ const useTimetableStore = create((set, get) => ({
       ]);
 
       const courseOptions = (courses ?? [])
-        .map((c) => c?.name || c?.code || c?.ID || "")
+        .map((c) => c?.ID || c?.code || c?.name || "")
         .filter(Boolean);
 
       const semesterOptions = Array.from(
@@ -59,7 +59,7 @@ const useTimetableStore = create((set, get) => ({
         .filter(Boolean);
 
       const roomOptions = (rooms ?? [])
-        .map((r) => r?.name || r?.ID || r?.unid || "")
+        .map((r) => r?.ID +" "+ r?.faculty || r?.name || r?.unid || "")
         .filter(Boolean);
 
       set({
