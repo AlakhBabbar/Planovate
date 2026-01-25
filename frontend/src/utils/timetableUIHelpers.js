@@ -10,13 +10,13 @@ import { generateTimetableId } from "./timetableHelpers";
  */
 export const DEFAULT_TIME_SLOTS = [
   "7:00 - 7:55",
-  "8:00 - 8:55",
-  "9:00 - 9:55",
-  "10:00 - 10:55",
-  "11:00 - 11:55",
-  "12:00 - 12:55",
-  "1:00 - 1:55",
-  "2:00 - 2:55",
+  "7:55 - 8:50",
+  "8:50 - 9:45",
+  "10:30 - 11:25",
+  "11:25 - 12:20",
+  "12:20 - 1:15",
+  "1:15 - 2:10",
+  "2:10 - 3:05",
 ];
 
 /**
@@ -190,7 +190,25 @@ export function generateTableName(currentTables) {
  */
 export function generateNextTimeSlot(currentTimeSlots) {
   const lastSlot = currentTimeSlots[currentTimeSlots.length - 1];
-  const [startHour, startMinute] = lastSlot.split(" - ")[1].split(":");
-  let newHour = parseInt(startHour) + 1;
-  return `${newHour}:00 - ${newHour}:55`;
+  const endTime = lastSlot.split(" - ")[1]; // Get ending time of last slot
+  const [endHour, endMinute] = endTime.split(":").map(num => parseInt(num));
+  
+  // Start time is the end time of the last slot
+  const startHour = endHour;
+  const startMinute = endMinute;
+  
+  // Add 55 minutes to get the end time
+  let newEndMinute = startMinute + 55;
+  let newEndHour = startHour;
+  
+  if (newEndMinute >= 60) {
+    newEndHour += 1;
+    newEndMinute -= 60;
+  }
+  
+  // Format the times (no leading zero for hours, but pad minutes)
+  const startTimeStr = `${startHour}:${startMinute.toString().padStart(2, '0')}`;
+  const endTimeStr = `${newEndHour}:${newEndMinute.toString().padStart(2, '0')}`;
+  
+  return `${startTimeStr} - ${endTimeStr}`;
 }

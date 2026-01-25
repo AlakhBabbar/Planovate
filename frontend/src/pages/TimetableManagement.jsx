@@ -115,7 +115,7 @@ const Timetable = () => {
 
       if (existingTimetable) {
         // Load data into the ACTIVE tab only
-        setTimeSlots(existingTimetable.timeSlots);
+        setTimeSlots(existingTimetable.timeSlots || DEFAULT_TIME_SLOTS);
         
         const firstLoadedTable = existingTimetable.tables[0] || "Table 1";
         setBatches(prev => ({
