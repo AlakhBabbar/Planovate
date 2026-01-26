@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Loader2, AlertCircle, Building2 } from "lucide-react";
+import { Loader2, AlertCircle, Building2, Download, ChevronDown } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { roomService } from "../firebase/services";
+import { roomService, timetableService } from "../firebase/services";
 import { getAllSchedules } from "../firebase/services/schedules";
 import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
+import { getCourseDisplayName, getTeacherDisplayName } from "../utils/idDisplayHelpers";
+import { exportRoomOccupancyToPdf, exportRoomOccupancyToExcel } from "../utils/roomOccupancyExport";
 
 const RoomOccupancy = () => {
   const [rooms, setRooms] = useState([]);
@@ -13,6 +15,7 @@ const RoomOccupancy = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedDay, setSelectedDay] = useState("Mon");
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const days = [
     { key: "Mon", label: "Monday" },
@@ -71,8 +74,54 @@ const RoomOccupancy = () => {
       console.log('📊 Loaded rooms:', roomsData.length);
       console.log('📊 Sample room:', roomsData[0]);
 
+      // Get unique timetable IDs from schedules
+      const uniqueTimetableIds = [...new Set(schedulesData.map(s => s.timetableId).filter(Boolean))];
+      
+      // Fetch timetable metadata for all unique IDs
+      const timetablesMap = new Map();
+      await Promise.all(
+        uniqueTimetableIds.map(async (timetableId) => {
+          try {
+            const timetableData = await timetableService.loadTimetable(timetableId);
+            if (timetableData && timetableData.meta) {
+              timetablesMap.set(timetableId, timetableData.meta);
+            }
+          } catch (err) {
+            console.warn(`Failed to load timetable metadata for ${timetableId}:`, err);
+          }
+        })
+      );
+
+      // Resolve IDs to display names and add metadata from timetable
+      const resolvedSchedules = await Promise.all(
+        schedulesData.map(async (schedule) => {
+          const resolved = { ...schedule };
+          
+          // Get metadata from timetable document
+          const timetableMeta = timetablesMap.get(schedule.timetableId);
+          if (timetableMeta) {
+            resolved.class = timetableMeta.class;
+            resolved.branch = timetableMeta.branch;
+            resolved.semester = timetableMeta.semester;
+            resolved.type = timetableMeta.type;
+          }
+          
+          // Resolve courseId to course display name
+          if (schedule.courseId) {
+            resolved.course = await getCourseDisplayName(schedule.courseId);
+          }
+          
+          // Resolve teacherId to teacher display name
+          if (schedule.teacherId) {
+            resolved.teacher = await getTeacherDisplayName(schedule.teacherId);
+          }
+          
+          return resolved;
+        })
+      );
+
       setRooms(roomsData);
-      setSchedules(schedulesData);
+      setSchedules(resolvedSchedules);
 
       // Find the maximum rowIndex to determine the last time slot
       let maxRowIndex = -1;
@@ -103,31 +152,55 @@ const RoomOccupancy = () => {
     }
   };
 
-  const getOccupancyForCell = (roomFullName, timeSlot, day) => {
+  const getOccupancyForCell = (roomId, rowIndex, dayKey) => {
+    // Map day key to colIndex (Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5)
+    const dayToColIndex = {
+      "Mon": 0,
+      "Tue": 1,
+      "Wed": 2,
+      "Thu": 3,
+      "Fri": 4,
+      "Sat": 5
+    };
+    
+    const colIndex = dayToColIndex[dayKey];
+    
     const matches = schedules.filter((s) => {
-      const roomMatch = s.room?.toLowerCase().trim() === roomFullName?.toLowerCase().trim();
-      const timeMatch = s.time === timeSlot;
-      const dayMatch = s.day === day;
+      // Match by room document ID (roomId)
+      const roomMatch = s.roomId && String(s.roomId) === String(roomId);
+      // Match by rowIndex (time slot)
+      const timeMatch = s.rowIndex === rowIndex;
+      // Match by colIndex (day)
+      const dayMatch = s.colIndex === colIndex;
       
       return roomMatch && timeMatch && dayMatch;
     });
     
     if (matches.length > 0) {
-      console.log(`✅ Found ${matches.length} matches for [${roomFullName}, ${timeSlot}, ${day}]`);
+      console.log(`✅ Found ${matches.length} matches for [Room ID: ${roomId}, Row: ${rowIndex}, Day: ${dayKey} (Col: ${colIndex})]`);
     }
     return matches;
   };
 
-  // Helper function to construct full room identifier as stored in schedules
-  const getRoomFullName = (room) => {
-    // Schedules store rooms as: "ID faculty" (e.g., "TC Technical")
-    const id = room.ID || '';
-    const faculty = room.faculty || '';
-    return `${id} ${faculty}`.trim();
+  // Helper function to get room document ID
+  const getRoomDocumentId = (room) => {
+    // Return the room's document ID (unid)
+    return String(room.unid || '');
+  };
+  
+  // Export handlers
+  const handleExportPdf = () => {
+    exportRoomOccupancyToPdf(rooms, schedules, timeSlots, "room-occupancy");
+    setShowExportMenu(false);
+  };
+  
+  const handleExportExcel = () => {
+    exportRoomOccupancyToExcel(rooms, schedules, timeSlots, "room-occupancy");
+    setShowExportMenu(false);
   };
 
-  const renderCell = (roomFullName, timeSlot) => {
-    const occupancies = getOccupancyForCell(roomFullName, timeSlot, selectedDay);
+  const renderCell = (roomId, rowIndex) => {
+    const occupancies = getOccupancyForCell(roomId, rowIndex, selectedDay);
 
     if (occupancies.length === 0) {
       return (
@@ -139,24 +212,38 @@ const RoomOccupancy = () => {
 
     return (
       <div className="space-y-1">
-        {occupancies.map((occ, idx) => (
-          <div
-            key={idx}
-            className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-xs"
-          >
-            <div className="font-semibold text-blue-900">{occ.teacher || "No Teacher"}</div>
-            <div className="text-blue-700 text-[10px] mt-0.5">
-              {occ.class && <span>{occ.class}</span>}
-              {occ.branch && <span> - {occ.branch}</span>}
-              {occ.batch && <span> ({occ.batch})</span>}
-            </div>
-            {occ.course && (
-              <div className="text-blue-600 text-[10px] mt-0.5">
-                Course: {occ.course}
+        {occupancies.map((occ, idx) => {
+          // Build complete class name: Class Branch Semester Type (NOT including course)
+          const classNameParts = [];
+          if (occ.class) classNameParts.push(occ.class);
+          if (occ.branch) classNameParts.push(occ.branch);
+          if (occ.semester) classNameParts.push(occ.semester); // This seems to be semester in the data
+          if (occ.type) classNameParts.push(occ.type);
+          
+          const fullClassName = classNameParts.join(" ");
+          
+          return (
+            <div
+              key={idx}
+              className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-xs"
+            >
+              <div className="font-semibold text-blue-900 text-[10px]">
+                {fullClassName}
+                {occ.batch && <span className="ml-1">({occ.batch})</span>}
               </div>
-            )}
-          </div>
-        ))}
+              {occ.course && (
+                <div className="text-blue-700 text-[10px] mt-0.5">
+                  Course: {occ.course}
+                </div>
+              )}
+              {occ.teacher && (
+                <div className="text-blue-600 text-[10px] mt-0.5">
+                  Teacher: {occ.teacher}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -166,9 +253,53 @@ const RoomOccupancy = () => {
       <Header />
 
       <main className="flex-1 container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Room Occupancy</h1>
-          <p className="text-gray-600">View which rooms are occupied at each time slot</p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Room Occupancy</h1>
+            <p className="text-gray-600">View which rooms are occupied at each time slot</p>
+          </div>
+          
+          {/* Export Button */}
+          {!loading && rooms.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowExportMenu(!showExportMenu)}
+                className="px-4 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors shadow-sm flex items-center gap-2 font-medium"
+              >
+                <Download size={18} />
+                Export
+                <ChevronDown size={16} />
+              </button>
+              
+              {showExportMenu && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowExportMenu(false)}
+                  />
+                  
+                  {/* Dropdown Menu */}
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                    <button
+                      onClick={handleExportPdf}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                    >
+                      <Download size={16} />
+                      Export as PDF
+                    </button>
+                    <button
+                      onClick={handleExportExcel}
+                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                    >
+                      <Download size={16} />
+                      Export as Excel
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -247,12 +378,12 @@ const RoomOccupancy = () => {
                               </div>
                             )}
                           </td>
-                          {timeSlots.map((timeSlot, idx) => (
+                          {timeSlots.map((timeSlot, rowIndex) => (
                             <td
-                              key={idx}
+                              key={rowIndex}
                               className="px-4 py-2 border-r border-gray-200 align-top"
                             >
-                              {renderCell(getRoomFullName(room), timeSlot)}
+                              {renderCell(getRoomDocumentId(room), rowIndex)}
                             </td>
                           ))}
                         </tr>

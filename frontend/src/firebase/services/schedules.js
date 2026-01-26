@@ -7,6 +7,7 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDocs,
   query,
@@ -106,12 +107,11 @@ export async function saveSchedules({ timetableId, schedules }) {
         batch: normalize(s.batch),
         type: normalize(s.type),
         updatedAt: serverTimestamp(),
+        // Always include ID fields - empty string if not set
+        courseId: s.courseId ? String(s.courseId) : "",
+        teacherId: s.teacherId ? String(s.teacherId) : "",
+        roomId: s.roomId ? String(s.roomId) : "",
       };
-      
-      // Add ONLY document IDs (no display names)
-      if (s.courseId) scheduleData.courseId = String(s.courseId);
-      if (s.teacherId) scheduleData.teacherId = String(s.teacherId);
-      if (s.roomId) scheduleData.roomId = String(s.roomId);
       
       batch.set(
         doc(schedulesCol, id),

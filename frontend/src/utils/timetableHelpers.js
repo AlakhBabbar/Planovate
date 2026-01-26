@@ -85,9 +85,14 @@ export function buildScheduleOccurrences({
           const courseId = entry.courseId ? String(entry.courseId) : "";
           const teacherId = entry.teacherId ? String(entry.teacherId) : "";
           const roomId = entry.roomId ? String(entry.roomId) : "";
+          
+          // Also check display names in case IDs haven't been set yet
+          const course = normalize(entry.course);
+          const teacher = normalize(entry.teacher);
+          const room = normalize(entry.room);
 
           // Skip truly empty blocks to keep the DB clean
-          if (!batch && !courseId && !teacherId && !roomId) {
+          if (!batch && !courseId && !teacherId && !roomId && !course && !teacher && !room) {
             console.log(`⏭️ Skipping empty cell: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}]`);
             continue;
           }
@@ -105,14 +110,14 @@ export function buildScheduleOccurrences({
             time: normalizedSlots[colIndex] ?? "",
             class: normalize(meta?.class),
             branch: normalize(meta?.branch),
+            semester: normalize(meta?.semester),
             batch,
             type: normalize(meta?.type),
+            // Always include ID fields, even if empty (empty string means field should be removed)
+            courseId,
+            teacherId,
+            roomId,
           };
-          
-          // Add ONLY document IDs (no display names)
-          if (courseId) occurrence.courseId = courseId;
-          if (teacherId) occurrence.teacherId = teacherId;
-          if (roomId) occurrence.roomId = roomId;
           
           occurrences.push(occurrence);
         }

@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Plus, AlertCircle } from "lucide-react";
+import { Plus, AlertCircle, Trash2 } from "lucide-react";
 import { validateCourse, validateTeacher, validateRoom } from "../../utils/validationHelpers";
 import { getCourseIdFromDisplay, getTeacherIdFromDisplay, getRoomIdFromDisplay } from "../../utils/idDisplayHelpers";
 
@@ -31,6 +31,23 @@ const TimetableCell = ({
   const inputRefs = useRef({});
   const validationTimeouts = useRef({});
   
+  // Handle clearing all entries in the cell
+  const handleClearCell = () => {
+    const confirmClear = window.confirm('Are you sure you want to clear all entries in this cell?');
+    if (!confirmClear) return;
+    
+    // Clear all batches in this cell
+    for (let i = 0; i < batchCount; i++) {
+      onUpdateBatch(rowIndex, colIndex, i, 'batchName', '');
+      onUpdateBatch(rowIndex, colIndex, i, 'course', '');
+      onUpdateBatch(rowIndex, colIndex, i, 'teacher', '');
+      onUpdateBatch(rowIndex, colIndex, i, 'room', '');
+      onUpdateBatch(rowIndex, colIndex, i, 'courseId', '');
+      onUpdateBatch(rowIndex, colIndex, i, 'teacherId', '');
+      onUpdateBatch(rowIndex, colIndex, i, 'roomId', '');
+    }
+  };
+
   // Handle input change with validation
   const handleInputChange = async (batchIndex, field, value) => {
     // Update the value immediately
@@ -48,30 +65,45 @@ const TimetableCell = ({
       let entityId = null;
       
       if (field === 'course') {
-        validation = await validateCourse(value);
-        if (validation.isValid && value.trim()) {
-          entityId = await getCourseIdFromDisplay(value);
-          if (entityId) {
-            // Store the courseId immediately
-            onUpdateBatch(rowIndex, colIndex, batchIndex, 'courseId', entityId);
+        if (!value.trim()) {
+          // Clear the courseId when field is empty
+          onUpdateBatch(rowIndex, colIndex, batchIndex, 'courseId', '');
+        } else {
+          validation = await validateCourse(value);
+          if (validation.isValid) {
+            entityId = await getCourseIdFromDisplay(value);
+            if (entityId) {
+              // Store the courseId immediately
+              onUpdateBatch(rowIndex, colIndex, batchIndex, 'courseId', entityId);
+            }
           }
         }
       } else if (field === 'teacher') {
-        validation = await validateTeacher(value);
-        if (validation.isValid && value.trim()) {
-          entityId = await getTeacherIdFromDisplay(value);
-          if (entityId) {
-            // Store the teacherId immediately
-            onUpdateBatch(rowIndex, colIndex, batchIndex, 'teacherId', entityId);
+        if (!value.trim()) {
+          // Clear the teacherId when field is empty
+          onUpdateBatch(rowIndex, colIndex, batchIndex, 'teacherId', '');
+        } else {
+          validation = await validateTeacher(value);
+          if (validation.isValid) {
+            entityId = await getTeacherIdFromDisplay(value);
+            if (entityId) {
+              // Store the teacherId immediately
+              onUpdateBatch(rowIndex, colIndex, batchIndex, 'teacherId', entityId);
+            }
           }
         }
       } else if (field === 'room') {
-        validation = await validateRoom(value);
-        if (validation.isValid && value.trim()) {
-          entityId = await getRoomIdFromDisplay(value);
-          if (entityId) {
-            // Store the roomId immediately
-            onUpdateBatch(rowIndex, colIndex, batchIndex, 'roomId', entityId);
+        if (!value.trim()) {
+          // Clear the roomId when field is empty
+          onUpdateBatch(rowIndex, colIndex, batchIndex, 'roomId', '');
+        } else {
+          validation = await validateRoom(value);
+          if (validation.isValid) {
+            entityId = await getRoomIdFromDisplay(value);
+            if (entityId) {
+              // Store the roomId immediately
+              onUpdateBatch(rowIndex, colIndex, batchIndex, 'roomId', entityId);
+            }
           }
         }
       }
@@ -318,19 +350,36 @@ const TimetableCell = ({
 
   return (
     <td className="border border-gray-200 p-0 min-w-[140px] bg-white align-top relative group">
-      {/* Create Batch Button - Top Right */}
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onCreateBatch(rowIndex, colIndex);
-        }}
-        className="absolute top-0.5 right-0.5 z-10 w-4 h-4 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded opacity-60 hover:opacity-100 transition-all"
-        title="Create new batch"
-        type="button"
-      >
-        <Plus className="w-2.5 h-2.5" />
-      </button>
+      {/* Action Buttons - Top Right */}
+      <div className="absolute top-0.5 right-0.5 z-10 flex gap-0.5">
+        {/* Delete Button */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleClearCell();
+          }}
+          className="w-4 h-4 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded opacity-60 hover:opacity-100 transition-all"
+          title="Clear all entries"
+          type="button"
+        >
+          <Trash2 className="w-2.5 h-2.5" />
+        </button>
+        
+        {/* Create Batch Button */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onCreateBatch(rowIndex, colIndex);
+          }}
+          className="w-4 h-4 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded opacity-60 hover:opacity-100 transition-all"
+          title="Create new batch"
+          type="button"
+        >
+          <Plus className="w-2.5 h-2.5" />
+        </button>
+      </div>
 
       <div className="flex divide-x divide-gray-200 min-h-[70px]">
         {Array.from({ length: batchCount }).map((_, batchIndex) => {
