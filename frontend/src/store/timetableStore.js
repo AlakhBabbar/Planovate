@@ -59,7 +59,12 @@ const useTimetableStore = create((set, get) => ({
         .filter(Boolean);
 
       const roomOptions = (rooms ?? [])
-        .map((r) => r?.ID +" "+ r?.faculty || r?.name || r?.unid || "")
+        .map((r) => {
+          if (r?.ID && r?.faculty) {
+            return `${r.ID} ${r.faculty}`;
+          }
+          return r?.ID || r?.name || r?.unid || "";
+        })
         .filter(Boolean);
 
       set({

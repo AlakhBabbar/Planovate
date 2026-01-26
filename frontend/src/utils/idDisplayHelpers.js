@@ -94,6 +94,25 @@ export async function getTeacherDisplayName(teacherId) {
 }
 
 /**
+ * Get teacher ID from display name
+ * Returns null if not found
+ */
+export async function getTeacherIdFromDisplay(displayName) {
+  if (!displayName) return null;
+  
+  const teachers = await fetchTeachersCache();
+  const trimmedName = displayName.trim();
+  
+  for (const [id, teacher] of teachers) {
+    if (teacher.ID && teacher.ID.trim() === trimmedName) {
+      return id;
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Get course display name by ID
  * Returns course ID if not found
  */
@@ -108,6 +127,26 @@ export async function getCourseDisplayName(courseId) {
   }
   
   return courseId;
+}
+
+/**
+ * Get course ID from display name
+ * Returns null if not found
+ */
+export async function getCourseIdFromDisplay(displayName) {
+  if (!displayName) return null;
+  
+  const courses = await fetchCoursesCache();
+  const trimmedName = displayName.trim();
+  
+  for (const [id, course] of courses) {
+    if ((course.ID && course.ID.trim() === trimmedName) || 
+        (course.code && course.code.trim() === trimmedName)) {
+      return id;
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -128,6 +167,33 @@ export async function getRoomDisplayName(roomId) {
   }
   
   return roomId;
+}
+
+/**
+ * Get room ID from display name
+ * Returns null if not found
+ */
+export async function getRoomIdFromDisplay(displayName) {
+  if (!displayName) return null;
+  
+  const rooms = await fetchRoomsCache();
+  const roomStr = displayName.trim();
+  
+  for (const [id, room] of rooms) {
+    // Check for exact match with "ID Faculty" format
+    if (room.ID && room.faculty) {
+      const fullDisplay = `${room.ID.trim()} ${room.faculty.trim()}`;
+      if (fullDisplay === roomStr) {
+        return id;
+      }
+    }
+    // Check for match with just the ID
+    if (room.ID && room.ID.trim() === roomStr) {
+      return id;
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -164,7 +230,8 @@ export async function resolveBatchDataForDisplay(batchData) {
 
 /**
  * Convert display values back to IDs for saving
- * This maintains backward compatibility
+ * Returns ONLY IDs (courseId, teacherId, roomId), not display names
+ * Display names will be removed from the returned object
  */
 export async function convertDisplayToIds(batchData) {
   const converted = {};
@@ -204,26 +271,36 @@ export async function convertDisplayToIds(batchData) {
   
   // Convert each batch entry
   for (const [key, value] of Object.entries(batchData)) {
-    converted[key] = { ...value };
+    // Start with only batchName - NO display names
+    converted[key] = {
+      batchName: value.batchName || ""
+    };
     
-    // Convert teacher
-    if (value.teacher) {
-      const teacherId = teacherByID.get(value.teacher.trim());
-      if (teacherId) {
-        converted[key].teacherId = teacherId;
-      }
-    }
-    
-    // Convert course
-    if (value.course) {
+    // If IDs already exist, use them
+    if (value.courseId) {
+      converted[key].courseId = String(value.courseId);
+    } else if (value.course) {
+      // Convert display name to ID
       const courseId = courseByID.get(value.course.trim());
       if (courseId) {
         converted[key].courseId = courseId;
       }
     }
     
-    // Convert room
-    if (value.room) {
+    if (value.teacherId) {
+      converted[key].teacherId = String(value.teacherId);
+    } else if (value.teacher) {
+      // Convert display name to ID
+      const teacherId = teacherByID.get(value.teacher.trim());
+      if (teacherId) {
+        converted[key].teacherId = teacherId;
+      }
+    }
+    
+    if (value.roomId) {
+      converted[key].roomId = String(value.roomId);
+    } else if (value.room) {
+      // Convert display name to ID
       const roomStr = value.room.trim();
       let roomId = roomByDisplay.get(roomStr);
       

@@ -3,6 +3,7 @@
  */
 
 import { normalize, safeId, cellKey, dataKey, DEFAULT_DAYS } from "./dataHelpers";
+import { getCourseIdFromDisplay, getTeacherIdFromDisplay, getRoomIdFromDisplay, getCourseDisplayName, getTeacherDisplayName, getRoomDisplayName } from "./idDisplayHelpers";
 
 /**
  * Gets the batch count for a specific cell
@@ -31,6 +32,7 @@ export function generateTimetableId(meta) {
 /**
  * Builds schedule occurrences from timetable data
  * Each occurrence represents a single batch in a cell
+ * NOTE: Only document IDs are saved, not display names
  */
 export function buildScheduleOccurrences({
   timetableId,
@@ -77,24 +79,22 @@ export function buildScheduleOccurrences({
           const entry = dataForTable?.[key] ?? {};
           console.log(`🔎 Looking for data at key "${key}":`, entry);
           
-          const course = normalize(entry.course);
-          const teacher = normalize(entry.teacher);
-          const room = normalize(entry.room);
           const batch = normalize(entry.batchName);
           
-          // Get ID fields if available (for new data structure)
+          // Get document IDs - ONLY IDs are saved to database
           const courseId = entry.courseId ? String(entry.courseId) : "";
           const teacherId = entry.teacherId ? String(entry.teacherId) : "";
           const roomId = entry.roomId ? String(entry.roomId) : "";
 
           // Skip truly empty blocks to keep the DB clean
-          if (!course && !teacher && !room && !batch && !courseId && !teacherId && !roomId) {
+          if (!batch && !courseId && !teacherId && !roomId) {
             console.log(`⏭️ Skipping empty cell: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}]`);
             continue;
           }
           
-          console.log(`✅ Adding schedule: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}] - ${course || '(no course)'}`);
+          console.log(`✅ Adding schedule: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}] - CourseID: ${courseId || '(none)'}`);
 
+          // Build occurrence object with ONLY IDs, not display names
           const occurrence = {
             timetableId,
             tableId: normalize(tableId),
@@ -106,13 +106,10 @@ export function buildScheduleOccurrences({
             class: normalize(meta?.class),
             branch: normalize(meta?.branch),
             batch,
-            course,
-            teacher,
             type: normalize(meta?.type),
-            room,
           };
           
-          // Add ID fields if they exist
+          // Add ONLY document IDs (no display names)
           if (courseId) occurrence.courseId = courseId;
           if (teacherId) occurrence.teacherId = teacherId;
           if (roomId) occurrence.roomId = roomId;
@@ -135,6 +132,7 @@ export function buildScheduleOccurrences({
 
 /**
  * Reconstructs timetable data structure from schedule list
+ * NOTE: This returns IDs only. Display names must be resolved separately using resolveBatchDataForDisplay()
  */
 export function reconstructTimetableFromSchedules(schedules) {
   const batchesByTable = {};
@@ -151,17 +149,21 @@ export function reconstructTimetableFromSchedules(schedules) {
     const nextCount = Math.max(currentCount, (o.batchIndex ?? 0) + 1);
     batchesByTable[tableId][cell] = nextCount;
 
+    // Store ONLY IDs and batch name
     const batchEntry = {
-      course: o.course ?? "",
-      teacher: o.teacher ?? "",
-      room: o.room ?? "",
       batchName: o.batch ?? "",
     };
     
-    // Add ID fields if they exist (new data structure)
+    // Store document IDs (these are the source of truth)
     if (o.courseId) batchEntry.courseId = String(o.courseId);
     if (o.teacherId) batchEntry.teacherId = String(o.teacherId);
     if (o.roomId) batchEntry.roomId = String(o.roomId);
+    
+    // Legacy support: if old data has display names but no IDs, keep them
+    // (This will be caught by validation and shown as "old format")
+    if (!o.courseId && o.course) batchEntry.course = o.course;
+    if (!o.teacherId && o.teacher) batchEntry.teacher = o.teacher;
+    if (!o.roomId && o.room) batchEntry.room = o.room;
     
     batchDataByTable[tableId][dataKey(o.rowIndex, o.colIndex, o.batchIndex ?? 0)] = batchEntry;
   });

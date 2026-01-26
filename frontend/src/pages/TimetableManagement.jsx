@@ -21,6 +21,7 @@ import {
 } from "../utils/timetableUIHelpers";
 import { courseService, roomService, teacherService, timetableService } from "../firebase/services";
 import { resolveBatchDataForDisplay, convertDisplayToIds } from "../utils/idDisplayHelpers";
+import { validateAllBatchData, hasValidationErrors, getValidationSummary } from "../utils/validationHelpers";
 
 // Generate unique table ID for internal use
 const generateUniqueTableId = () => `table_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -45,6 +46,7 @@ const Timetable = () => {
   const [batches, setBatches] = useState({});
   const [batchData, setBatchData] = useState({});
   const [conflicts, setConflicts] = useState({});
+  const [validationErrors, setValidationErrors] = useState({});
   const [showExportModal, setShowExportModal] = useState(false);
   
   // Track loaded metadata per tab to prevent refetching on tab switch
@@ -239,8 +241,45 @@ const Timetable = () => {
       return updatedBatchData;
     });
   };
+  
+  // Handle validation state updates from cells
+  const handleValidationChange = (dataKey, field, validation) => {
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      
+      // Initialize errors for this cell if not exists
+      if (!newErrors[activeTable]) {
+        newErrors[activeTable] = {};
+      }
+      if (!newErrors[activeTable][dataKey]) {
+        newErrors[activeTable][dataKey] = {};
+      }
+      
+      // Update validation for this field
+      if (validation.isValid) {
+        // Remove error if valid
+        delete newErrors[activeTable][dataKey][field];
+        // Clean up empty objects
+        if (Object.keys(newErrors[activeTable][dataKey]).length === 0) {
+          delete newErrors[activeTable][dataKey];
+        }
+        if (Object.keys(newErrors[activeTable]).length === 0) {
+          delete newErrors[activeTable];
+        }
+      } else {
+        // Add error if invalid
+        newErrors[activeTable][dataKey][field] = validation;
+      }
+      
+      return newErrors;
+    });
+  };
 
   const stats = calculateConflictStats(conflicts);
+  
+  // Calculate validation stats
+  const activeValidationErrors = validationErrors[activeTable] || {};
+  const validationErrorCount = Object.keys(activeValidationErrors).length;
 
   // Keyboard navigation handlers
   const handleClassKeyDown = (e) => {
@@ -314,9 +353,55 @@ const Timetable = () => {
       // Get the active table's data with proper table name
       const tableName = generateTableName(activeTable, tables);
       
-      // Convert display names back to IDs before saving
+      // Validate all batch data before converting
       const currentBatchData = batchData[activeTable] || {};
+      
+      // Run validation on all batch data
+      const errors = await validateAllBatchData(currentBatchData);
+      
+      // Check if there are any validation errors
+      if (hasValidationErrors(errors)) {
+        const summary = getValidationSummary(errors);
+        const errorMessage = `Cannot save timetable. Please fix the following errors:\n\n` +
+          `- Invalid courses: ${summary.courseErrors}\n` +
+          `- Invalid teachers: ${summary.teacherErrors}\n` +
+          `- Invalid rooms: ${summary.roomErrors}\n\n` +
+          `Total errors: ${summary.totalErrors}\n\n` +
+          `Make sure all courses, teachers, and rooms exist in the database.`;
+        alert(errorMessage);
+        
+        // Update validation state to show errors
+        setValidationErrors(prev => ({
+          ...prev,
+          [activeTable]: errors
+        }));
+        return;
+      }
+      
+      // Convert display names back to IDs before saving
       const convertedBatchData = await convertDisplayToIds(currentBatchData);
+      
+      // Verify that all entries have IDs
+      let missingIds = false;
+      for (const [key, value] of Object.entries(convertedBatchData)) {
+        if (value.course && !value.courseId) {
+          console.error(`Missing courseId for key ${key}:`, value);
+          missingIds = true;
+        }
+        if (value.teacher && !value.teacherId) {
+          console.error(`Missing teacherId for key ${key}:`, value);
+          missingIds = true;
+        }
+        if (value.room && !value.roomId) {
+          console.error(`Missing roomId for key ${key}:`, value);
+          missingIds = true;
+        }
+      }
+      
+      if (missingIds) {
+        alert("Error: Some entries could not be converted to IDs. Please ensure all courses, teachers, and rooms exist in the database.");
+        return;
+      }
       
       const batchesByTable = {
         [tableName]: batches[activeTable] || {}
@@ -356,7 +441,7 @@ const Timetable = () => {
         ...prev,
         [activeTable]: { ...prev[activeTable], timetableId: id }
       }));
-      alert(`Saved timetable to Firestore (ID: ${id})`);
+      alert(`✅ Timetable saved successfully! (ID: ${id})`);
     } catch (error) {
       console.error("Error saving timetable:", error);
       alert("Failed to save timetable. Check console for details.");
@@ -456,6 +541,16 @@ const Timetable = () => {
             <span>Rooms: {stats.roomConflicts > 0 ? `${stats.roomConflicts} Conflicts` : 'Clear'}</span>
           </div>
         </div>
+        <div className={`p-3 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-300 border-l-4 ${
+          validationErrorCount > 0 
+            ? "bg-orange-50 border-orange-500 text-orange-900" 
+            : "bg-green-50 border-green-500 text-green-900"
+        }`}>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            {validationErrorCount > 0 ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
+            <span>Validation: {validationErrorCount > 0 ? `${validationErrorCount} Errors` : 'Valid'}</span>
+          </div>
+        </div>
       </div>
 
 
@@ -533,11 +628,13 @@ const Timetable = () => {
           batches={batches[activeTable] || {}}
           batchData={batchData[activeTable] || {}}
           conflicts={conflicts[activeTable] || {}}
+          validationErrors={validationErrors[activeTable] || {}}
           courseOptions={courseOptions}
           teacherOptions={teacherOptions}
           roomOptions={roomOptions}
           onCreateBatch={createBatch}
           onUpdateBatch={updateBatch}
+          onValidationChange={handleValidationChange}
           firstCellRef={firstCellRef}
         />
 

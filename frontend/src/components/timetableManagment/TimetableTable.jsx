@@ -6,11 +6,13 @@ const TimetableTable = ({
   batches,
   batchData,
   conflicts, 
+  validationErrors,
   courseOptions,
   teacherOptions,
   roomOptions,
   onCreateBatch, 
   onUpdateBatch,
+  onValidationChange,
   firstCellRef
 }) => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -47,11 +49,13 @@ const TimetableTable = ({
                   batches={batches}
                   batchData={batchData}
                   conflicts={conflicts}
+                  validationErrors={validationErrors}
                   courseOptions={courseOptions}
                   teacherOptions={teacherOptions}
                   roomOptions={roomOptions}
                   onCreateBatch={onCreateBatch}
                   onUpdateBatch={onUpdateBatch}
+                  onValidationChange={onValidationChange}
                   isFirstCell={rowIndex === 0 && colIndex === 0}
                   firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}
                 />

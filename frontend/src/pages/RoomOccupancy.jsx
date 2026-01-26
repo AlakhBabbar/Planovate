@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { roomService } from "../firebase/services";
 import { getAllSchedules } from "../firebase/services/schedules";
+import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
 
 const RoomOccupancy = () => {
   const [rooms, setRooms] = useState([]);
@@ -21,6 +22,35 @@ const RoomOccupancy = () => {
     { key: "Fri", label: "Friday" },
     { key: "Sat", label: "Saturday" },
   ];
+
+  /**
+   * Generate a time slot based on its index (rowIndex).
+   * First 8 slots are from DEFAULT_TIME_SLOTS, then generate 55-minute slots incrementally.
+   */
+  const generateTimeSlot = (rowIndex) => {
+    // Use default time slots for the first 8 slots
+    if (rowIndex < DEFAULT_TIME_SLOTS.length) {
+      return DEFAULT_TIME_SLOTS[rowIndex];
+    }
+
+    // For additional slots, generate 55-minute increments
+    // Last default slot ends at 3:05, so start from there
+    const lastDefaultEnd = "3:05";
+    const [hours, minutes] = lastDefaultEnd.split(":").map(Number);
+    
+    // Calculate how many 55-minute slots past the default
+    const extraSlots = rowIndex - DEFAULT_TIME_SLOTS.length + 1;
+    const startMinutes = hours * 60 + minutes + (extraSlots - 1) * 55;
+    const endMinutes = startMinutes + 55;
+    
+    const formatTime = (totalMinutes) => {
+      const h = Math.floor(totalMinutes / 60);
+      const m = totalMinutes % 60;
+      return `${h}:${m.toString().padStart(2, "0")}`;
+    };
+    
+    return `${formatTime(startMinutes)} - ${formatTime(endMinutes)}`;
+  };
 
   useEffect(() => {
     loadData();
@@ -44,21 +74,26 @@ const RoomOccupancy = () => {
       setRooms(roomsData);
       setSchedules(schedulesData);
 
-      // Extract unique time slots from schedules and sort them properly
-      const uniqueTimeSlots = [...new Set(schedulesData.map(s => s.time).filter(Boolean))];
-      
-      // Sort time slots by start time
-      const sortedTimeSlots = uniqueTimeSlots.sort((a, b) => {
-        const getStartTime = (slot) => {
-          const start = slot.split(' - ')[0];
-          const [hours, minutes] = start.split(':').map(Number);
-          return hours * 60 + minutes;
-        };
-        return getStartTime(a) - getStartTime(b);
+      // Find the maximum rowIndex to determine the last time slot
+      let maxRowIndex = -1;
+      schedulesData.forEach((schedule) => {
+        if (schedule.rowIndex !== undefined && schedule.rowIndex > maxRowIndex) {
+          maxRowIndex = schedule.rowIndex;
+        }
       });
 
-      console.log('📊 Time slots:', sortedTimeSlots);
-      setTimeSlots(sortedTimeSlots);
+      console.log('📊 Maximum rowIndex found:', maxRowIndex);
+
+      // Generate time slots from 0 to maxRowIndex
+      const generatedTimeSlots = [];
+      if (maxRowIndex >= 0) {
+        for (let i = 0; i <= maxRowIndex; i++) {
+          generatedTimeSlots.push(generateTimeSlot(i));
+        }
+      }
+
+      console.log('📊 Generated time slots:', generatedTimeSlots);
+      setTimeSlots(generatedTimeSlots);
 
     } catch (err) {
       console.error("Error loading data:", err);

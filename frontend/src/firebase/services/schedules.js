@@ -92,25 +92,30 @@ export async function saveSchedules({ timetableId, schedules }) {
         `${timetableId}__${s.tableId}-${s.rowIndex}-${s.colIndex}-${s.batchIndex}`
       );
       
+      // Build schedule object with ONLY IDs, not display names
+      const scheduleData = {
+        timetableId: String(timetableId),
+        tableId: normalize(s.tableId),
+        rowIndex: Number(s.rowIndex) || 0,
+        colIndex: Number(s.colIndex) || 0,
+        batchIndex: Number(s.batchIndex) || 0,
+        day: normalize(s.day),
+        time: normalize(s.time),
+        class: normalize(s.class),
+        branch: normalize(s.branch),
+        batch: normalize(s.batch),
+        type: normalize(s.type),
+        updatedAt: serverTimestamp(),
+      };
+      
+      // Add ONLY document IDs (no display names)
+      if (s.courseId) scheduleData.courseId = String(s.courseId);
+      if (s.teacherId) scheduleData.teacherId = String(s.teacherId);
+      if (s.roomId) scheduleData.roomId = String(s.roomId);
+      
       batch.set(
         doc(schedulesCol, id),
-        {
-          timetableId: String(timetableId),
-          tableId: normalize(s.tableId),
-          rowIndex: Number(s.rowIndex) || 0,
-          colIndex: Number(s.colIndex) || 0,
-          batchIndex: Number(s.batchIndex) || 0,
-          day: normalize(s.day),
-          time: normalize(s.time),
-          class: normalize(s.class),
-          branch: normalize(s.branch),
-          batch: normalize(s.batch),
-          course: normalize(s.course),
-          teacher: normalize(s.teacher),
-          room: normalize(s.room),
-          type: normalize(s.type),
-          updatedAt: serverTimestamp(),
-        },
+        scheduleData,
         { merge: true }
       );
     });

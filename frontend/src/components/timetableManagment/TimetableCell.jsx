@@ -1,5 +1,7 @@
 import React, { useRef } from "react";
-import { Plus } from "lucide-react";
+import { Plus, AlertCircle } from "lucide-react";
+import { validateCourse, validateTeacher, validateRoom } from "../../utils/validationHelpers";
+import { getCourseIdFromDisplay, getTeacherIdFromDisplay, getRoomIdFromDisplay } from "../../utils/idDisplayHelpers";
 
 const TimetableCell = ({ 
   rowIndex, 
@@ -7,11 +9,13 @@ const TimetableCell = ({
   batches,
   batchData,
   conflicts, 
+  validationErrors,
   courseOptions,
   teacherOptions,
   roomOptions,
   onCreateBatch, 
   onUpdateBatch,
+  onValidationChange,
   isFirstCell,
   firstCellRef
 }) => {
@@ -25,6 +29,60 @@ const TimetableCell = ({
   
   // Create refs for inputs within each batch
   const inputRefs = useRef({});
+  const validationTimeouts = useRef({});
+  
+  // Handle input change with validation
+  const handleInputChange = async (batchIndex, field, value) => {
+    // Update the value immediately
+    onUpdateBatch(rowIndex, colIndex, batchIndex, field, value);
+    
+    // Clear existing timeout for this field
+    const timeoutKey = `${batchIndex}-${field}`;
+    if (validationTimeouts.current[timeoutKey]) {
+      clearTimeout(validationTimeouts.current[timeoutKey]);
+    }
+    
+    // Debounce validation (wait 500ms after user stops typing)
+    validationTimeouts.current[timeoutKey] = setTimeout(async () => {
+      let validation = { isValid: true, error: null };
+      let entityId = null;
+      
+      if (field === 'course') {
+        validation = await validateCourse(value);
+        if (validation.isValid && value.trim()) {
+          entityId = await getCourseIdFromDisplay(value);
+          if (entityId) {
+            // Store the courseId immediately
+            onUpdateBatch(rowIndex, colIndex, batchIndex, 'courseId', entityId);
+          }
+        }
+      } else if (field === 'teacher') {
+        validation = await validateTeacher(value);
+        if (validation.isValid && value.trim()) {
+          entityId = await getTeacherIdFromDisplay(value);
+          if (entityId) {
+            // Store the teacherId immediately
+            onUpdateBatch(rowIndex, colIndex, batchIndex, 'teacherId', entityId);
+          }
+        }
+      } else if (field === 'room') {
+        validation = await validateRoom(value);
+        if (validation.isValid && value.trim()) {
+          entityId = await getRoomIdFromDisplay(value);
+          if (entityId) {
+            // Store the roomId immediately
+            onUpdateBatch(rowIndex, colIndex, batchIndex, 'roomId', entityId);
+          }
+        }
+      }
+      
+      // Notify parent component of validation result
+      if (onValidationChange) {
+        const dataKey = `${rowIndex}-${colIndex}-${batchIndex}`;
+        onValidationChange(dataKey, field, validation);
+      }
+    }, 500);
+  };
 
   // Helper function to check if a cell has batch fields
   const cellHasBatchField = (targetRow, targetCol) => {
@@ -279,8 +337,14 @@ const TimetableCell = ({
           const dataKey = `${rowIndex}-${colIndex}-${batchIndex}`;
           const batch = batchData[dataKey] || {};
           const conflictInfo = conflicts?.[dataKey] || {};
+          const validationInfo = validationErrors?.[dataKey] || {};
           const hasTeacherConflict = conflictInfo.teacher?.conflict;
           const hasRoomConflict = conflictInfo.room?.conflict;
+          
+          // Validation errors
+          const hasCourseError = validationInfo.course && !validationInfo.course.isValid;
+          const hasTeacherError = validationInfo.teacher && !validationInfo.teacher.isValid;
+          const hasRoomError = validationInfo.room && !validationInfo.room.isValid;
           
           // Check if data is migrated (has IDs) or using old format
           const isCourseOldFormat = batch.course && !batch.courseId;
@@ -309,92 +373,123 @@ const TimetableCell = ({
               )}
 
               {/* Course Field */}
-              <input
-                ref={(el) => {
-                  inputRefs.current[`${batchIndex}-course`] = el;
-                  // If no batch field shown, course is the first input for first cell
-                  if (isFirstCell && batchIndex === 0 && !showBatchField && firstCellRef) {
-                    firstCellRef.current = el;
+              <div className="relative">
+                <input
+                  ref={(el) => {
+                    inputRefs.current[`${batchIndex}-course`] = el;
+                    // If no batch field shown, course is the first input for first cell
+                    if (isFirstCell && batchIndex === 0 && !showBatchField && firstCellRef) {
+                      firstCellRef.current = el;
+                    }
+                  }}
+                  list={`courses-${rowIndex}-${colIndex}-${batchIndex}`}
+                  type="text"
+                  placeholder="Course"
+                  value={batch.course || ""}
+                  onChange={(e) => handleInputChange(batchIndex, 'course', e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, batchIndex, 'course')}
+                  className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
+                    hasCourseError
+                      ? "border-orange-500 bg-orange-50 focus:ring-orange-500 focus:border-orange-500"
+                      : isCourseOldFormat
+                      ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
+                      : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
+                  }`}
+                  title={
+                    hasCourseError
+                      ? `⚠️ ${validationInfo.course?.error || 'Invalid course'}`
+                      : isCourseOldFormat
+                      ? "⚠️ Not migrated - Using old format (no ID reference)"
+                      : ""
                   }
-                }}
-                list={`courses-${rowIndex}-${colIndex}-${batchIndex}`}
-                type="text"
-                placeholder="Course"
-                value={batch.course || ""}
-                onChange={(e) => onUpdateBatch(rowIndex, colIndex, batchIndex, 'course', e.target.value)}
-                onKeyDown={(e) => handleKeyDown(e, batchIndex, 'course')}
-                className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
-                  isCourseOldFormat
-                    ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
-                    : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
-                }`}
-                title={isCourseOldFormat ? "⚠️ Not migrated - Using old format (no ID reference)" : ""}
-              />
-              <datalist id={`courses-${rowIndex}-${colIndex}-${batchIndex}`}>
-                {courses.map((course, idx) => (
-                  <option key={idx} value={course} />
-                ))}
-              </datalist>
+                />
+                {hasCourseError && (
+                  <AlertCircle className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-orange-500" />
+                )}
+                <datalist id={`courses-${rowIndex}-${colIndex}-${batchIndex}`}>
+                  {courses.map((course, idx) => (
+                    <option key={idx} value={course} />
+                  ))}
+                </datalist>
+              </div>
 
               {/* Teacher Field */}
-              <input
-                ref={(el) => inputRefs.current[`${batchIndex}-teacher`] = el}
-                list={`teachers-${rowIndex}-${colIndex}-${batchIndex}`}
-                type="text"
-                placeholder="Teacher"
-                value={batch.teacher || ""}
-                onChange={(e) => onUpdateBatch(rowIndex, colIndex, batchIndex, "teacher", e.target.value)}
-                onKeyDown={(e) => handleKeyDown(e, batchIndex, 'teacher')}
-                className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
-                  hasTeacherConflict 
-                    ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
-                    : isTeacherOldFormat
-                    ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
-                    : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
-                }`}
-                title={
-                  hasTeacherConflict 
-                    ? "⚠️ Conflict: Teacher assigned elsewhere at this time" 
-                    : isTeacherOldFormat
-                    ? "⚠️ Not migrated - Using old format (no ID reference)"
-                    : ""
-                }
-              />
-              <datalist id={`teachers-${rowIndex}-${colIndex}-${batchIndex}`}>
-                {teachers.map((teacher, idx) => (
-                  <option key={idx} value={teacher} />
-                ))}
-              </datalist>
+              <div className="relative">
+                <input
+                  ref={(el) => inputRefs.current[`${batchIndex}-teacher`] = el}
+                  list={`teachers-${rowIndex}-${colIndex}-${batchIndex}`}
+                  type="text"
+                  placeholder="Teacher"
+                  value={batch.teacher || ""}
+                  onChange={(e) => handleInputChange(batchIndex, 'teacher', e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, batchIndex, 'teacher')}
+                  className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
+                    hasTeacherError
+                      ? "border-orange-500 bg-orange-50 focus:ring-orange-500 focus:border-orange-500"
+                      : hasTeacherConflict 
+                      ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
+                      : isTeacherOldFormat
+                      ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
+                      : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
+                  }`}
+                  title={
+                    hasTeacherError
+                      ? `⚠️ ${validationInfo.teacher?.error || 'Invalid teacher'}`
+                      : hasTeacherConflict 
+                      ? "⚠️ Conflict: Teacher assigned elsewhere at this time" 
+                      : isTeacherOldFormat
+                      ? "⚠️ Not migrated - Using old format (no ID reference)"
+                      : ""
+                  }
+                />
+                {hasTeacherError && (
+                  <AlertCircle className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-orange-500" />
+                )}
+                <datalist id={`teachers-${rowIndex}-${colIndex}-${batchIndex}`}>
+                  {teachers.map((teacher, idx) => (
+                    <option key={idx} value={teacher} />
+                  ))}
+                </datalist>
+              </div>
 
               {/* Room Field */}
-              <input
-                ref={(el) => inputRefs.current[`${batchIndex}-room`] = el}
-                list={`rooms-${rowIndex}-${colIndex}-${batchIndex}`}
-                type="text"
-                placeholder="Room"
-                value={batch.room || ""}
-                onChange={(e) => onUpdateBatch(rowIndex, colIndex, batchIndex, "room", e.target.value)}
-                onKeyDown={(e) => handleKeyDown(e, batchIndex, 'room')}
-                className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
-                  hasRoomConflict 
-                    ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
-                    : isRoomOldFormat
-                    ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
-                    : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
-                }`}
-                title={
-                  hasRoomConflict 
-                    ? "⚠️ Conflict: Room assigned elsewhere at this time" 
-                    : isRoomOldFormat
-                    ? "⚠️ Not migrated - Using old format (no ID reference)"
-                    : ""
-                }
-              />
-              <datalist id={`rooms-${rowIndex}-${colIndex}-${batchIndex}`}>
-                {rooms.map((room, idx) => (
-                  <option key={idx} value={room} />
-                ))}
-              </datalist>
+              <div className="relative">
+                <input
+                  ref={(el) => inputRefs.current[`${batchIndex}-room`] = el}
+                  list={`rooms-${rowIndex}-${colIndex}-${batchIndex}`}
+                  type="text"
+                  placeholder="Room"
+                  value={batch.room || ""}
+                  onChange={(e) => handleInputChange(batchIndex, 'room', e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, batchIndex, 'room')}
+                  className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
+                    hasRoomError
+                      ? "border-orange-500 bg-orange-50 focus:ring-orange-500 focus:border-orange-500"
+                      : hasRoomConflict 
+                      ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
+                      : isRoomOldFormat
+                      ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
+                      : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
+                  }`}
+                  title={
+                    hasRoomError
+                      ? `⚠️ ${validationInfo.room?.error || 'Invalid room'}`
+                      : hasRoomConflict 
+                      ? "⚠️ Conflict: Room assigned elsewhere at this time" 
+                      : isRoomOldFormat
+                      ? "⚠️ Not migrated - Using old format (no ID reference)"
+                      : ""
+                  }
+                />
+                {hasRoomError && (
+                  <AlertCircle className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-orange-500" />
+                )}
+                <datalist id={`rooms-${rowIndex}-${colIndex}-${batchIndex}`}>
+                  {rooms.map((room, idx) => (
+                    <option key={idx} value={room} />
+                  ))}
+                </datalist>
+              </div>
             </div>
           );
         })}
