@@ -242,6 +242,78 @@ const Timetable = () => {
     });
   };
   
+  // Copy cell data from source to target
+  const handleCopyCell = (sourceRow, sourceCol, targetRow, targetCol) => {
+    const sourceBatchData = batchData[activeTable] || {};
+    const sourceBatches = batches[activeTable] || {};
+    const sourceKey = `${sourceRow}-${sourceCol}`;
+    const sourceBatchCount = sourceBatches[sourceKey] || 1;
+    
+    // Copy batch count
+    setBatches(prev => ({
+      ...prev,
+      [activeTable]: {
+        ...prev[activeTable],
+        [`${targetRow}-${targetCol}`]: sourceBatchCount
+      }
+    }));
+    
+    // Copy all batch data
+    setBatchData(prev => {
+      const newBatchData = { ...prev };
+      if (!newBatchData[activeTable]) {
+        newBatchData[activeTable] = {};
+      }
+      
+      for (let i = 0; i < sourceBatchCount; i++) {
+        const sourceDataKey = `${sourceRow}-${sourceCol}-${i}`;
+        const targetDataKey = `${targetRow}-${targetCol}-${i}`;
+        const sourceData = sourceBatchData[sourceDataKey];
+        
+        if (sourceData) {
+          newBatchData[activeTable][targetDataKey] = { ...sourceData };
+        }
+      }
+      
+      return newBatchData;
+    });
+  };
+  
+  // Move cell data from source to target
+  const handleMoveCell = (sourceRow, sourceCol, targetRow, targetCol) => {
+    const sourceBatchData = batchData[activeTable] || {};
+    const sourceBatches = batches[activeTable] || {};
+    const sourceKey = `${sourceRow}-${sourceCol}`;
+    const sourceBatchCount = sourceBatches[sourceKey] || 1;
+    
+    // Copy to target first
+    handleCopyCell(sourceRow, sourceCol, targetRow, targetCol);
+    
+    // Clear source cell
+    setBatches(prev => ({
+      ...prev,
+      [activeTable]: {
+        ...prev[activeTable],
+        [sourceKey]: 1 // Reset to 1 batch
+      }
+    }));
+    
+    setBatchData(prev => {
+      const newBatchData = { ...prev };
+      if (!newBatchData[activeTable]) {
+        newBatchData[activeTable] = {};
+      }
+      
+      // Clear all source batches
+      for (let i = 0; i < sourceBatchCount; i++) {
+        const sourceDataKey = `${sourceRow}-${sourceCol}-${i}`;
+        delete newBatchData[activeTable][sourceDataKey];
+      }
+      
+      return newBatchData;
+    });
+  };
+  
   // Handle validation state updates from cells
   const handleValidationChange = (dataKey, field, validation) => {
     setValidationErrors(prev => {
@@ -636,6 +708,8 @@ const Timetable = () => {
           onUpdateBatch={updateBatch}
           onValidationChange={handleValidationChange}
           firstCellRef={firstCellRef}
+          onCopyCell={handleCopyCell}
+          onMoveCell={handleMoveCell}
         />
 
         {/* Add Time Slot Button */}

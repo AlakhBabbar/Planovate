@@ -1,5 +1,5 @@
-import React, { useRef } from "react";
-import { Plus, AlertCircle, Trash2 } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Plus, AlertCircle, Trash2, Copy, Move, X, GripVertical } from "lucide-react";
 import { validateCourse, validateTeacher, validateRoom } from "../../utils/validationHelpers";
 import { getCourseIdFromDisplay, getTeacherIdFromDisplay, getRoomIdFromDisplay } from "../../utils/idDisplayHelpers";
 
@@ -17,7 +17,9 @@ const TimetableCell = ({
   onUpdateBatch,
   onValidationChange,
   isFirstCell,
-  firstCellRef
+  firstCellRef,
+  onCopyCell,
+  onMoveCell
 }) => {
   const key = `${rowIndex}-${colIndex}`;
   const batchCount = batches[key] || 1;
@@ -30,6 +32,70 @@ const TimetableCell = ({
   // Create refs for inputs within each batch
   const inputRefs = useRef({});
   const validationTimeouts = useRef({});
+  const [showDropMenu, setShowDropMenu] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [hoveredAction, setHoveredAction] = useState(null);
+  
+  // Drag and drop handlers
+  const handleDragStart = (e) => {
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData('text/plain', JSON.stringify({ rowIndex, colIndex }));
+    e.currentTarget.style.opacity = '0.5';
+    // Store source cell info globally since getData doesn't work in dragOver
+    window.__dragSourceCell = { rowIndex, colIndex };
+  };
+  
+  const handleDragEnd = (e) => {
+    e.currentTarget.style.opacity = '1';
+    window.__dragSourceCell = null;
+  };
+  
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDragOver(true);
+  };
+  
+  const handleDragLeave = (e) => {
+    // Only hide if leaving the cell completely
+    if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget)) {
+      setDragOver(false);
+      setHoveredAction(null);
+    }
+  };
+  
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const sourceData = window.__dragSourceCell;
+    if (!sourceData) {
+      setDragOver(false);
+      setHoveredAction(null);
+      return;
+    }
+    
+    const targetRow = rowIndex;
+    const targetCol = colIndex;
+    
+    // Don't drop on same cell
+    if (sourceData.rowIndex === targetRow && sourceData.colIndex === targetCol) {
+      setDragOver(false);
+      setHoveredAction(null);
+      return;
+    }
+    
+    // Execute action based on which icon was hovered
+    if (hoveredAction === 'copy' && onCopyCell) {
+      onCopyCell(sourceData.rowIndex, sourceData.colIndex, targetRow, targetCol);
+    } else if (hoveredAction === 'move' && onMoveCell) {
+      onMoveCell(sourceData.rowIndex, sourceData.colIndex, targetRow, targetCol);
+    }
+    
+    setDragOver(false);
+    setHoveredAction(null);
+    window.__dragSourceCell = null;
+  };
   
   // Handle clearing all entries in the cell
   const handleClearCell = () => {
@@ -349,7 +415,24 @@ const TimetableCell = ({
   };
 
   return (
-    <td className="border border-gray-200 p-0 min-w-[140px] bg-white align-top relative group">
+    <td 
+      className={`border border-gray-400 p-2 min-w-[140px] bg-white align-top relative group cursor-move transition-all ${
+        dragOver ? 'bg-blue-100 ring-2 ring-blue-400' : ''
+      }`}
+      draggable="true"
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag Indicator - Top Left */}
+      <div className="absolute top-0.5 left-0.5 z-10">
+        <div className="w-4 h-4 flex items-center justify-center text-gray-400 opacity-40 group-hover:opacity-100 transition-all">
+          <GripVertical className="w-3 h-3" />
+        </div>
+      </div>
+
       {/* Action Buttons - Top Right */}
       <div className="absolute top-0.5 right-0.5 z-10 flex gap-0.5">
         {/* Delete Button */}
@@ -380,6 +463,78 @@ const TimetableCell = ({
           <Plus className="w-2.5 h-2.5" />
         </button>
       </div>
+
+      {/* Drag Overlay with Action Icons */}
+      {dragOver && (
+        <div 
+          className="absolute inset-0 bg-gradient-to-br from-blue-100 to-blue-50 z-20 flex items-center justify-center gap-4 rounded backdrop-blur-sm"
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {/* Copy Icon */}
+          <div
+            onMouseEnter={() => setHoveredAction('copy')}
+            onMouseLeave={() => setHoveredAction(null)}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setHoveredAction('copy');
+            }}
+            className={`flex flex-col items-center justify-center w-16 h-16 rounded-lg cursor-pointer transition-all duration-200 ${
+              hoveredAction === 'copy'
+                ? 'bg-blue-600 scale-110 shadow-xl'
+                : 'bg-gray-400 hover:bg-gray-500 shadow-md'
+            }`}
+            title="Copy to this cell"
+          >
+            <Copy size={28} className="text-white pointer-events-none" />
+            {hoveredAction === 'copy' && (
+              <span className="text-white text-[10px] font-medium mt-1 pointer-events-none">Copy</span>
+            )}
+          </div>
+
+          {/* Move Icon */}
+          <div
+            onMouseEnter={() => setHoveredAction('move')}
+            onMouseLeave={() => setHoveredAction(null)}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setHoveredAction('move');
+            }}
+            className={`flex flex-col items-center justify-center w-16 h-16 rounded-lg cursor-pointer transition-all duration-200 ${
+              hoveredAction === 'move'
+                ? 'bg-green-600 scale-110 shadow-xl'
+                : 'bg-gray-400 hover:bg-gray-500 shadow-md'
+            }`}
+            title="Move to this cell"
+          >
+            <Move size={28} className="text-white pointer-events-none" />
+            {hoveredAction === 'move' && (
+              <span className="text-white text-[10px] font-medium mt-1 pointer-events-none">Move</span>
+            )}
+          </div>
+
+          {/* Cancel Icon */}
+          <div
+            onMouseEnter={() => setHoveredAction('cancel')}
+            onMouseLeave={() => setHoveredAction(null)}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setHoveredAction('cancel');
+            }}
+            className={`flex flex-col items-center justify-center w-16 h-16 rounded-lg cursor-pointer transition-all duration-200 ${
+              hoveredAction === 'cancel'
+                ? 'bg-red-600 scale-110 shadow-xl'
+                : 'bg-gray-400 hover:bg-gray-500 shadow-md'
+            }`}
+            title="Cancel"
+          >
+            <X size={28} className="text-white pointer-events-none" />
+            {hoveredAction === 'cancel' && (
+              <span className="text-white text-[10px] font-medium mt-1 pointer-events-none">Cancel</span>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex divide-x divide-gray-200 min-h-[70px]">
         {Array.from({ length: batchCount }).map((_, batchIndex) => {

@@ -13,7 +13,9 @@ const TimetableTable = ({
   onCreateBatch, 
   onUpdateBatch,
   onValidationChange,
-  firstCellRef
+  firstCellRef,
+  onCopyCell,
+  onMoveCell
 }) => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -22,13 +24,13 @@ const TimetableTable = ({
       <table className="w-full border-collapse">
         <thead>
           <tr className="bg-gray-100">
-            <th className="border border-gray-300 p-1.5 text-left font-semibold text-gray-700 text-xs min-w-[80px]">
+            <th className="border border-gray-400 p-3 text-left font-semibold text-gray-700 text-xs min-w-[80px]">
               Time
             </th>
             {days.map((day) => (
               <th 
                 key={day} 
-                className="border border-gray-300 p-1.5 text-center font-semibold text-gray-700 text-xs min-w-[140px]"
+                className="border border-gray-400 p-3 text-center font-semibold text-gray-700 text-xs min-w-[140px]"
               >
                 {day}
               </th>
@@ -38,7 +40,7 @@ const TimetableTable = ({
         <tbody>
           {timeSlots.map((slot, rowIndex) => (
             <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
-              <td className="border border-gray-300 p-1.5 font-medium text-gray-600 bg-gray-50 text-xs">
+              <td className="border border-gray-400 p-3 font-medium text-gray-600 bg-gray-50 text-xs">
                 {slot}
               </td>
               {days.map((_, colIndex) => (
@@ -57,8 +59,8 @@ const TimetableTable = ({
                   onUpdateBatch={onUpdateBatch}
                   onValidationChange={onValidationChange}
                   isFirstCell={rowIndex === 0 && colIndex === 0}
-                  firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}
-                />
+                  firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}                  onCopyCell={onCopyCell}
+                  onMoveCell={onMoveCell}                />
               ))}
             </tr>
           ))}
