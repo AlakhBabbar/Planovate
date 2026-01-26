@@ -20,6 +20,7 @@ import {
   DEFAULT_TIME_SLOTS,
 } from "../utils/timetableUIHelpers";
 import { courseService, roomService, teacherService, timetableService } from "../firebase/services";
+import { resolveBatchDataForDisplay, convertDisplayToIds } from "../utils/idDisplayHelpers";
 
 // Generate unique table ID for internal use
 const generateUniqueTableId = () => `table_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -118,13 +119,18 @@ const Timetable = () => {
         setTimeSlots(existingTimetable.timeSlots || DEFAULT_TIME_SLOTS);
         
         const firstLoadedTable = existingTimetable.tables[0] || "Table 1";
+        const loadedBatchData = existingTimetable.batchDataByTable[firstLoadedTable] || {};
+        
+        // Resolve IDs to display names
+        const resolvedBatchData = await resolveBatchDataForDisplay(loadedBatchData);
+        
         setBatches(prev => ({
           ...prev,
           [activeTable]: existingTimetable.batchesByTable[firstLoadedTable] || {}
         }));
         setBatchData(prev => ({
           ...prev,
-          [activeTable]: existingTimetable.batchDataByTable[firstLoadedTable] || {}
+          [activeTable]: resolvedBatchData
         }));
         
         // Update timetableId in metadata
@@ -183,13 +189,18 @@ const Timetable = () => {
         setTimeSlots(loadedTimetable.timeSlots);
         
         const firstLoadedTable = loadedTimetable.tables[0] || "Table 1";
+        const loadedBatchData = loadedTimetable.batchDataByTable[firstLoadedTable] || {};
+        
+        // Resolve IDs to display names
+        const resolvedBatchData = await resolveBatchDataForDisplay(loadedBatchData);
+        
         setBatches(prev => ({
           ...prev,
           [activeTable]: loadedTimetable.batchesByTable[firstLoadedTable] || {}
         }));
         setBatchData(prev => ({
           ...prev,
-          [activeTable]: loadedTimetable.batchDataByTable[firstLoadedTable] || {}
+          [activeTable]: resolvedBatchData
         }));
         
         setShowBrowseModal(false);
@@ -302,11 +313,16 @@ const Timetable = () => {
     try {
       // Get the active table's data with proper table name
       const tableName = generateTableName(activeTable, tables);
+      
+      // Convert display names back to IDs before saving
+      const currentBatchData = batchData[activeTable] || {};
+      const convertedBatchData = await convertDisplayToIds(currentBatchData);
+      
       const batchesByTable = {
         [tableName]: batches[activeTable] || {}
       };
       const batchDataByTable = {
-        [tableName]: batchData[activeTable] || {}
+        [tableName]: convertedBatchData
       };
       
       console.log('🚀 Saving timetable with data:', {

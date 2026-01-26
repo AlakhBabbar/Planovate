@@ -81,17 +81,21 @@ export function buildScheduleOccurrences({
           const teacher = normalize(entry.teacher);
           const room = normalize(entry.room);
           const batch = normalize(entry.batchName);
+          
+          // Get ID fields if available (for new data structure)
+          const courseId = entry.courseId ? String(entry.courseId) : "";
+          const teacherId = entry.teacherId ? String(entry.teacherId) : "";
+          const roomId = entry.roomId ? String(entry.roomId) : "";
 
           // Skip truly empty blocks to keep the DB clean
-          if (!course && !teacher && !room && !batch) {
+          if (!course && !teacher && !room && !batch && !courseId && !teacherId && !roomId) {
             console.log(`⏭️ Skipping empty cell: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}]`);
             continue;
           }
           
           console.log(`✅ Adding schedule: ${tableId} [${rowIndex}, ${colIndex}, ${batchIndex}] - ${course || '(no course)'}`);
 
-
-          occurrences.push({
+          const occurrence = {
             timetableId,
             tableId: normalize(tableId),
             rowIndex,
@@ -106,7 +110,14 @@ export function buildScheduleOccurrences({
             teacher,
             type: normalize(meta?.type),
             room,
-          });
+          };
+          
+          // Add ID fields if they exist
+          if (courseId) occurrence.courseId = courseId;
+          if (teacherId) occurrence.teacherId = teacherId;
+          if (roomId) occurrence.roomId = roomId;
+          
+          occurrences.push(occurrence);
         }
       }
     }
@@ -140,12 +151,19 @@ export function reconstructTimetableFromSchedules(schedules) {
     const nextCount = Math.max(currentCount, (o.batchIndex ?? 0) + 1);
     batchesByTable[tableId][cell] = nextCount;
 
-    batchDataByTable[tableId][dataKey(o.rowIndex, o.colIndex, o.batchIndex ?? 0)] = {
+    const batchEntry = {
       course: o.course ?? "",
       teacher: o.teacher ?? "",
       room: o.room ?? "",
       batchName: o.batch ?? "",
     };
+    
+    // Add ID fields if they exist (new data structure)
+    if (o.courseId) batchEntry.courseId = String(o.courseId);
+    if (o.teacherId) batchEntry.teacherId = String(o.teacherId);
+    if (o.roomId) batchEntry.roomId = String(o.roomId);
+    
+    batchDataByTable[tableId][dataKey(o.rowIndex, o.colIndex, o.batchIndex ?? 0)] = batchEntry;
   });
 
   return { batchesByTable, batchDataByTable };

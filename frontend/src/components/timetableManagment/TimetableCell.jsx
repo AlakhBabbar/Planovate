@@ -281,6 +281,11 @@ const TimetableCell = ({
           const conflictInfo = conflicts?.[dataKey] || {};
           const hasTeacherConflict = conflictInfo.teacher?.conflict;
           const hasRoomConflict = conflictInfo.room?.conflict;
+          
+          // Check if data is migrated (has IDs) or using old format
+          const isCourseOldFormat = batch.course && !batch.courseId;
+          const isTeacherOldFormat = batch.teacher && !batch.teacherId;
+          const isRoomOldFormat = batch.room && !batch.roomId;
 
           return (
             <div key={batchIndex} className="flex-1 min-w-[70px] p-1 space-y-1">
@@ -318,7 +323,12 @@ const TimetableCell = ({
                 value={batch.course || ""}
                 onChange={(e) => onUpdateBatch(rowIndex, colIndex, batchIndex, 'course', e.target.value)}
                 onKeyDown={(e) => handleKeyDown(e, batchIndex, 'course')}
-                className="w-full text-[10px] px-1 py-0.5 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
+                  isCourseOldFormat
+                    ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
+                    : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
+                }`}
+                title={isCourseOldFormat ? "⚠️ Not migrated - Using old format (no ID reference)" : ""}
               />
               <datalist id={`courses-${rowIndex}-${colIndex}-${batchIndex}`}>
                 {courses.map((course, idx) => (
@@ -337,10 +347,18 @@ const TimetableCell = ({
                 onKeyDown={(e) => handleKeyDown(e, batchIndex, 'teacher')}
                 className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
                   hasTeacherConflict 
-                    ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500" 
+                    ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
+                    : isTeacherOldFormat
+                    ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
                     : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
                 }`}
-                title={hasTeacherConflict ? "⚠️ Conflict: Teacher assigned elsewhere at this time" : ""}
+                title={
+                  hasTeacherConflict 
+                    ? "⚠️ Conflict: Teacher assigned elsewhere at this time" 
+                    : isTeacherOldFormat
+                    ? "⚠️ Not migrated - Using old format (no ID reference)"
+                    : ""
+                }
               />
               <datalist id={`teachers-${rowIndex}-${colIndex}-${batchIndex}`}>
                 {teachers.map((teacher, idx) => (
@@ -359,10 +377,18 @@ const TimetableCell = ({
                 onKeyDown={(e) => handleKeyDown(e, batchIndex, 'room')}
                 className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
                   hasRoomConflict 
-                    ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500" 
+                    ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
+                    : isRoomOldFormat
+                    ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
                     : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
                 }`}
-                title={hasRoomConflict ? "⚠️ Conflict: Room assigned elsewhere at this time" : ""}
+                title={
+                  hasRoomConflict 
+                    ? "⚠️ Conflict: Room assigned elsewhere at this time" 
+                    : isRoomOldFormat
+                    ? "⚠️ Not migrated - Using old format (no ID reference)"
+                    : ""
+                }
               />
               <datalist id={`rooms-${rowIndex}-${colIndex}-${batchIndex}`}>
                 {rooms.map((room, idx) => (

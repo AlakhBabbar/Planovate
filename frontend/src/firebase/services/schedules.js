@@ -152,3 +152,11 @@ export async function saveSchedules({ timetableId, schedules }) {
 export async function deleteScheduleById(scheduleId) {
   await deleteDoc(doc(schedulesCol, String(scheduleId)));
 }
+
+/**
+ * Fetches all schedules across all timetables
+ */
+export async function getAllSchedules() {
+  const snap = await getDocs(schedulesCol);
+  return snap.docs.map((d) => d.data());
+}

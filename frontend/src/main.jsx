@@ -9,6 +9,9 @@ import RoomLoad from "./pages/RoomLoad";
 import Curriculum from "./pages/Curriculum";
 import Timetable from "./pages/TimetableManagement";
 import BulkUpload from "./pages/BulkUpload";
+import Manage from "./pages/Manage";
+import RoomOccupancy from "./pages/RoomOccupancy";
+import DataMigration from "./temp/DataMigration";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -20,7 +23,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/room-load" element={<RoomLoad />} />
         <Route path="/curriculum" element={<Curriculum />} />
         <Route path="/timetable" element={<Timetable />} />
+        <Route path="/room-occupancy" element={<RoomOccupancy />} />
+        <Route path="/manage" element={<Manage />} />
         <Route path="/bulk-upload" element={<BulkUpload />} />
+        <Route path="/data-migration" element={<DataMigration />} />
       </Routes>
     </Router>
   </React.StrictMode>
