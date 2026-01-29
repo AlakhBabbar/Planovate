@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { Loader2, AlertCircle, GraduationCap, Download, ChevronDown, Search, Filter } from "lucide-react";
+import { Loader2, AlertCircle, GraduationCap, Download, ChevronDown, Search, Filter, Eye, X } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
+import ClassOccupancyPreviewModal from "../components/ClassOccupancyPreviewModal";
 import { timetableService } from "../firebase/services";
 import { getAllSchedules } from "../firebase/services/schedules";
 import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
 import { getCourseDisplayName, getRoomDisplayName, getTeacherDisplayName } from "../utils/idDisplayHelpers";
-import { exportClassOccupancyToPdf, exportClassOccupancyToExcel } from "../utils/classOccupancyExport";
+import { exportClassOccupancyToPdf, exportClassOccupancyToExcel, exportClassOccupancyToPdfMobile, exportClassOccupancyToExcelMobile } from "../utils/classOccupancyExport";
 
 const ClassOccupancy = () => {
   const [classes, setClasses] = useState([]);
@@ -15,6 +16,8 @@ const ClassOccupancy = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showPreviewAllModal, setShowPreviewAllModal] = useState(false);
   
   // State for filters
   const [selectedClass, setSelectedClass] = useState(null);
@@ -229,18 +232,62 @@ const ClassOccupancy = () => {
   }, [classes, searchQuery, selectedBranch, selectedSemester]);
   
   // Export handlers
-  const handleExportPdf = () => {
-    if (selectedClass) {
-      exportClassOccupancyToPdf([selectedClass], schedules, timeSlots, "class-occupancy");
-    }
+  const handleShowPreview = () => {
+    setShowPreviewModal(true);
     setShowExportMenu(false);
   };
-  
-  const handleExportExcel = () => {
-    if (selectedClass) {
-      exportClassOccupancyToExcel([selectedClass], schedules, timeSlots, "class-occupancy");
-    }
+
+  const handleShowExportAll = () => {
+    setShowPreviewAllModal(true);
     setShowExportMenu(false);
+  };
+
+  const handleExportPdf = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || (selectedClass ? [selectedClass] : []);
+    if (classesToExport.length > 0) {
+      exportClassOccupancyToPdf(classesToExport, schedules, timeSlots, "class-occupancy", branchColors);
+    }
+  };
+  
+  const handleExportExcel = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || (selectedClass ? [selectedClass] : []);
+    if (classesToExport.length > 0) {
+      exportClassOccupancyToExcel(classesToExport, schedules, timeSlots, "class-occupancy", branchColors);
+    }
+  };
+
+  const handleExportPdfMobile = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || (selectedClass ? [selectedClass] : []);
+    if (classesToExport.length > 0) {
+      exportClassOccupancyToPdfMobile(classesToExport, schedules, timeSlots, "class-occupancy-mobile", branchColors);
+    }
+  };
+  
+  const handleExportExcelMobile = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || (selectedClass ? [selectedClass] : []);
+    if (classesToExport.length > 0) {
+      exportClassOccupancyToExcelMobile(classesToExport, schedules, timeSlots, "class-occupancy-mobile", branchColors);
+    }
+  };
+
+  const handleExportAllPdf = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || filteredClasses;
+    exportClassOccupancyToPdf(classesToExport, schedules, timeSlots, "all-classes-occupancy", branchColors);
+  };
+  
+  const handleExportAllExcel = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || filteredClasses;
+    exportClassOccupancyToExcel(classesToExport, schedules, timeSlots, "all-classes-occupancy", branchColors);
+  };
+
+  const handleExportAllPdfMobile = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || filteredClasses;
+    exportClassOccupancyToPdfMobile(classesToExport, schedules, timeSlots, "all-classes-occupancy-mobile", branchColors);
+  };
+  
+  const handleExportAllExcelMobile = (branchColors = {}, orderedClasses = null) => {
+    const classesToExport = orderedClasses || filteredClasses;
+    exportClassOccupancyToExcelMobile(classesToExport, schedules, timeSlots, "all-classes-occupancy-mobile", branchColors);
   };
 
   // Render cell for individual class view (days as columns)
@@ -407,7 +454,7 @@ const ClassOccupancy = () => {
           </div>
           
           {/* Export Button */}
-          {!loading && classes.length > 0 && selectedClass && (
+          {!loading && classes.length > 0 && (
             <div className="relative">
               <button
                 onClick={() => setShowExportMenu(!showExportMenu)}
@@ -427,20 +474,25 @@ const ClassOccupancy = () => {
                   />
                   
                   {/* Dropdown Menu */}
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
+                    {selectedClass && (
+                      <>
+                        <button
+                          onClick={handleShowPreview}
+                          className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                        >
+                          <Eye size={16} />
+                          Preview & Export
+                        </button>
+                        <div className="border-t border-gray-200 my-1"></div>
+                      </>
+                    )}
                     <button
-                      onClick={handleExportPdf}
+                      onClick={handleShowExportAll}
                       className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
                     >
                       <Download size={16} />
-                      Export as PDF
-                    </button>
-                    <button
-                      onClick={handleExportExcel}
-                      className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
-                    >
-                      <Download size={16} />
-                      Export as Excel
+                      Export All Classes ({filteredClasses.length})
                     </button>
                   </div>
                 </>
@@ -561,6 +613,37 @@ const ClassOccupancy = () => {
       </main>
 
       <Footer />
+
+      {/* Preview Modal */}
+      {showPreviewModal && selectedClass && (
+        <ClassOccupancyPreviewModal
+          isOpen={showPreviewModal}
+          onClose={() => setShowPreviewModal(false)}
+          classData={selectedClass}
+          schedules={schedules}
+          timeSlots={timeSlots}
+          onExportPdf={handleExportPdf}
+          onExportExcel={handleExportExcel}
+          onExportPdfMobile={handleExportPdfMobile}
+          onExportExcelMobile={handleExportExcelMobile}
+        />
+      )}
+
+      {/* Preview All Modal */}
+      {showPreviewAllModal && (
+        <ClassOccupancyPreviewModal
+          isOpen={showPreviewAllModal}
+          onClose={() => setShowPreviewAllModal(false)}
+          classData={null}
+          allClasses={filteredClasses}
+          schedules={schedules}
+          timeSlots={timeSlots}
+          onExportPdf={handleExportAllPdf}
+          onExportExcel={handleExportAllExcel}
+          onExportPdfMobile={handleExportAllPdfMobile}
+          onExportExcelMobile={handleExportAllExcelMobile}
+        />
+      )}
     </div>
   );
 };
