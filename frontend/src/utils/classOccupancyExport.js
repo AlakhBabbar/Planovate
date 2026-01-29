@@ -520,15 +520,13 @@ function buildMobileClassesOccupancyGrid(classes, schedules, timeSlots) {
             if (matches.length === 0) {
               row.push("—");
             } else {
-              // Mobile format: Only teacher and room ID (before the dash)
+              // Mobile format: course ID, teacher ID, room ID (only), and batch
               const cellContent = matches.map((occ) => {
                 const parts = [];
-                if (occ.teacher) parts.push(occ.teacher);
-                if (occ.room) {
-                  // Extract only room ID (before the dash)
-                  const roomId = occ.room.split('-')[0].trim();
-                  parts.push(`[${roomId}]`);
-                }
+                if (occ.course) parts.push(`C: ${occ.course}`);
+                if (occ.teacher) parts.push(`T: ${occ.teacher}`);
+                if (occ.roomIdOnly) parts.push(`[${occ.roomIdOnly}]`);
+                if (occ.batch) parts.push(occ.batch);
                 return parts.join(" ");
               }).join(", ");
               

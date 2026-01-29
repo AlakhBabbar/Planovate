@@ -266,24 +266,23 @@ const ClassOccupancyPreviewModal = ({
     
     // Format cell content based on export size
     if (exportSize === "mobile") {
-      // Mobile format: only teacher and room ID
+      // Mobile format: course ID, teacher ID, room ID (only), and batch
       return matches.map((occ) => {
         const parts = [];
-        if (occ.teacher) parts.push(occ.teacher);
-        if (occ.room) {
-          // Extract only room ID (before the dash)
-          const roomId = occ.room.split('-')[0].trim();
-          parts.push(`[${roomId}]`);
-        }
+        if (occ.course) parts.push(`C: ${occ.course}`);
+        if (occ.teacher) parts.push(`T: ${occ.teacher}`);
+        if (occ.roomIdOnly) parts.push(`[${occ.roomIdOnly}]`);
+        if (occ.batch) parts.push(occ.batch);
         return parts.join(" ");
       }).join(", ");
     } else {
-      // Actual format: course, teacher, and room
+      // Actual format: course ID, teacher ID, room ID (only), and batch
       return matches.map((occ) => {
         const parts = [];
-        if (occ.course) parts.push(occ.course);
-        if (occ.teacher) parts.push(`(${occ.teacher})`);
-        if (occ.room) parts.push(`[${occ.room}]`);
+        if (occ.course) parts.push(`Course: ${occ.course}`);
+        if (occ.teacher) parts.push(`Teacher: ${occ.teacher}`);
+        if (occ.roomIdOnly) parts.push(`[${occ.roomIdOnly}]`);
+        if (occ.batch) parts.push(occ.batch);
         return parts.join(" ");
       }).join(", ");
     }

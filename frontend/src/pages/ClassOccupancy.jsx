@@ -118,7 +118,12 @@ const ClassOccupancy = () => {
           
           // Resolve roomId to room display name
           if (schedule.roomId) {
-            resolved.room = await getRoomDisplayName(schedule.roomId);
+            const roomFullDisplay = await getRoomDisplayName(schedule.roomId);
+            resolved.room = roomFullDisplay;
+            // Get the actual room ID field from the room document
+            const rooms = await import('../utils/idDisplayHelpers').then(m => m.fetchRoomsCache());
+            const room = rooms.get(String(schedule.roomId));
+            resolved.roomIdOnly = room?.ID || schedule.roomId;
           }
 
           // Resolve teacherId to teacher display name
