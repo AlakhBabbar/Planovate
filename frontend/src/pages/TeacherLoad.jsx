@@ -322,10 +322,10 @@ const TeacherLoad = () => {
             <div className="flex items-center gap-3 mb-2">
               <Users className="w-6 h-6 text-gray-700" />
               <h1 className="text-2xl font-semibold text-gray-900">
-                Teacher Management
+                Staff Management
               </h1>
             </div>
-            <p className="text-sm text-gray-600">Manage teachers by faculty and department</p>
+            <p className="text-sm text-gray-600">Manage staff by faculty and department</p>
           </div>
 
           {/* Success Message */}
