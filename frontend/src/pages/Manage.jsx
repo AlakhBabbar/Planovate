@@ -1,18 +1,29 @@
-import React, { useState, useEffect } from "react";
-import { Trash2, Calendar, Loader2, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Trash2, Calendar, Loader2, AlertCircle, Download, Database, Upload } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { timetableService } from "../firebase/services";
+import { backupCompleteDatabase, getBackupSummary, restoreFromBackup } from "../utils/databaseBackup";
 
 const Manage = () => {
   const [timetables, setTimetables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(null);
   const [error, setError] = useState(null);
+  const [backing, setBacking] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [backupSummary, setBackupSummary] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     loadTimetables();
+    loadBackupSummary();
   }, []);
+
+  const loadBackupSummary = async () => {
+    const summary = await getBackupSummary();
+    setBackupSummary(summary);
+  };
 
   const loadTimetables = async () => {
     try {
@@ -48,19 +59,151 @@ const Manage = () => {
     }
   };
 
+  const handleBackupDatabase = async () => {
+    if (!window.confirm("This will download all database collections as separate JSON files. Continue?")) {
+      return;
+    }
+
+    try {
+      setBacking(true);
+      const result = await backupCompleteDatabase();
+      
+      if (result.success) {
+        const summary = Object.entries(result.summary)
+          .map(([name, data]) => `${name}: ${data.count} records`)
+          .join('\n');
+        alert(`Database backup completed successfully!\n\n${summary}\n\nFiles have been downloaded to your Downloads folder.`);
+      } else {
+        alert(`Backup failed: ${result.error}`);
+      }
+    } catch (err) {
+      console.error("Error backing up database:", err);
+      alert("Failed to backup database. Please try again.");
+    } finally {
+      setBacking(false);
+    }
+  };
+
+  const handleRestoreClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (event) => {
+    const files = Array.from(event.target.files || []);
+    
+    if (files.length === 0) {
+      return;
+    }
+
+    const fileNames = files.map(f => f.name).join(', ');
+    const confirmMessage = `You are about to restore data from ${files.length} file(s):\n\n${fileNames}\n\nThis will upload the data to your current database. Existing records with the same IDs will be overwritten.\n\nContinue?`;
+    
+    if (!window.confirm(confirmMessage)) {
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      setRestoring(true);
+      const result = await restoreFromBackup(files);
+      
+      if (result.success) {
+        const summary = Object.entries(result.summary)
+          .map(([name, data]) => {
+            if (data.failed > 0) {
+              return `${name}: ${data.success}/${data.total} uploaded (${data.failed} failed)`;
+            }
+            return `${name}: ${data.success || data.total || 0} records uploaded`;
+          })
+          .join('\n');
+        
+        alert(`Database restore completed!\n\n${summary}\n\nPage will reload to show updated data.`);
+        
+        // Reload the page to refresh data
+        window.location.reload();
+      } else {
+        alert(`Restore failed: ${result.error}`);
+      }
+    } catch (err) {
+      console.error("Error restoring database:", err);
+      alert("Failed to restore database. Please try again.");
+    } finally {
+      setRestoring(false);
+      event.target.value = '';
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
       
       <main className="flex-1 container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Manage Timetables</h1>
-          <p className="text-gray-600">View and delete existing timetables</p>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Manage Timetables</h1>
+              <p className="text-gray-600">View and delete existing timetables</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleRestoreClick}
+                disabled={restoring}
+                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                title="Restore database from backup files"
+              >
+                {restoring ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Restoring...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-5 h-5" />
+                    Restore Backup
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleBackupDatabase}
+                disabled={backing}
+                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                title="Download complete database backup"
+              >
+                {backing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Backing up...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-5 h-5" />
+                    Backup Database
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          {backupSummary && (
+            <div className="mt-4 flex items-center gap-2 text-sm text-gray-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
+              <Database className="w-4 h-4 text-blue-600" />
+              <span>
+                Database contains: {backupSummary.teachers} teachers, {backupSummary.courses} courses, {backupSummary.rooms} rooms, {backupSummary.timetables} timetables
+              </span>
+            </div>
+          )}
         </div>
 
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
             <div>
               <h3 className="font-semibold text-red-900">Error</h3>
               <p className="text-red-700 text-sm">{error}</p>

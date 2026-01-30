@@ -117,16 +117,13 @@ export function buildTimetableExportGrid({
 }
 
 function buildPdfTitle(meta, tableId) {
-  const name = normalize(meta?.name);
   const cls = normalize(meta?.class);
   const br = normalize(meta?.branch);
   const sem = normalize(meta?.semester);
   const type = normalize(meta?.type);
 
   const parts = compactLines([
-    name,
-    [cls, br, sem, type].filter(Boolean).join(" "),
-    tableId ? `(${tableId})` : "",
+    [cls, br, sem, type].filter(Boolean).join(" ")
   ]);
 
   return parts.join(" - ") || "Timetable";
@@ -310,7 +307,9 @@ export function exportTimetablesToPdf({ fileName, meta, tables }) {
     if (index > 0) doc.addPage();
 
     const grid = buildTimetableExportGrid(t);
-    const title = buildPdfTitle(meta, grid.tableId);
+    // Use table-specific metadata if available, otherwise fall back to global meta
+    const tableMeta = t.meta || meta;
+    const title = buildPdfTitle(tableMeta, grid.tableId);
 
     doc.setFontSize(12);
     doc.text(title, marginX, marginTop);
@@ -427,9 +426,7 @@ export function exportTimetablesToExcel({ fileName, meta, tables }) {
   XLSX.writeFile(wb, `${safe}.xlsx`);
 }
 
-function buildDocHtml({ meta, grids }) {
-  const title = buildPdfTitle(meta, "");
-
+function buildDocHtml({ meta, grids, tables }) {
   const escapeHtml = (s) =>
     String(s ?? "")
       .replace(/&/g, "&amp;")
@@ -437,9 +434,13 @@ function buildDocHtml({ meta, grids }) {
       .replace(/>/g, "&gt;")
       .replace(/\"/g, "&quot;");
 
-  const tableToHtml = (grid) => {
+  const tableToHtml = (grid, index) => {
     const headRow = grid.head?.[0] ?? [];
     const rows = [headRow, ...(grid.body ?? [])];
+    
+    // Use table-specific metadata if available
+    const tableMeta = tables?.[index]?.meta || meta;
+    const tableTitle = buildPdfTitle(tableMeta, "");
 
     const tr = (cells, isHead) => {
       const tag = isHead ? "th" : "td";
@@ -456,7 +457,7 @@ function buildDocHtml({ meta, grids }) {
     };
 
     return (
-      `<h3 style="margin: 16px 0 6px;">${escapeHtml(grid.tableId || "Table")}</h3>` +
+      `<h3 style="margin: 16px 0 6px;">${escapeHtml(tableTitle)}</h3>` +
       '<table border="1" cellspacing="0" cellpadding="4" style="border-collapse: collapse; width: 100%; font-size: 10pt;">' +
       "<thead>" +
       tr(rows[0], true) +
@@ -468,13 +469,15 @@ function buildDocHtml({ meta, grids }) {
     );
   };
 
+  const mainTitle = tables && tables.length > 1 ? "Timetables" : buildPdfTitle(meta, "");
+
   return (
     "<!doctype html>" +
     "<html><head><meta charset=\"utf-8\"/>" +
-    `<title>${escapeHtml(title)}</title>` +
+    `<title>${escapeHtml(mainTitle)}</title>` +
     "</head><body>" +
-    `<h2 style=\"margin: 0 0 8px;\">${escapeHtml(title)}</h2>` +
-    (grids ?? []).map((g) => tableToHtml(g)).join("") +
+    `<h2 style=\"margin: 0 0 8px;\">${escapeHtml(mainTitle)}</h2>` +
+    (grids ?? []).map((g, i) => tableToHtml(g, i)).join("") +
     "</body></html>"
   );
 }
@@ -485,7 +488,7 @@ function buildDocHtml({ meta, grids }) {
 export function exportTimetablesToDoc({ fileName, meta, tables }) {
   const safe = sanitizeFileBaseName(fileName || meta?.name || "timetable");
   const grids = (tables ?? []).map((t) => buildTimetableExportGrid(t));
-  const html = buildDocHtml({ meta, grids });
+  const html = buildDocHtml({ meta, grids, tables });
   const blob = new Blob([html], { type: "application/msword" });
   saveBlobFile(blob, `${safe}.doc`);
 }

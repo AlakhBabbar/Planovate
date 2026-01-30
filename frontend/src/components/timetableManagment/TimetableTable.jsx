@@ -20,17 +20,18 @@ const TimetableTable = ({
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-300 shadow-sm">
-      <table className="w-full border-collapse">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border border-gray-400 p-3 text-left font-semibold text-gray-700 text-xs min-w-[80px]">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+      <div className="overflow-auto max-h-[600px]">
+      <table className="w-full">
+        <thead className="sticky top-0 z-20">
+          <tr className="bg-gray-50 border-b border-gray-200">
+            <th className="sticky left-0 z-30 p-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wide w-24 bg-gray-50 border-r border-gray-200">
               Time
             </th>
             {days.map((day) => (
               <th 
                 key={day} 
-                className="border border-gray-400 p-3 text-center font-semibold text-gray-700 text-xs min-w-[140px]"
+                className="p-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wide min-w-[120px] bg-gray-50"
               >
                 {day}
               </th>
@@ -39,8 +40,8 @@ const TimetableTable = ({
         </thead>
         <tbody>
           {timeSlots.map((slot, rowIndex) => (
-            <tr key={rowIndex} className="hover:bg-gray-50 transition-colors">
-              <td className="border border-gray-400 p-3 font-medium text-gray-600 bg-gray-50 text-xs">
+            <tr key={rowIndex} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+              <td className="sticky left-0 z-10 p-3 font-medium text-gray-600 bg-gray-50 text-xs whitespace-nowrap border-r border-gray-200">
                 {slot}
               </td>
               {days.map((_, colIndex) => (
@@ -66,6 +67,7 @@ const TimetableTable = ({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 };

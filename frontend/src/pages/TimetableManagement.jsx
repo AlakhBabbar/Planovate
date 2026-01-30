@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X } from "lucide-react";
+import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2 } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import TimetableTable from "../components/timetableManagment/TimetableTable";
@@ -48,6 +48,7 @@ const Timetable = () => {
   const [conflicts, setConflicts] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
   const [showExportModal, setShowExportModal] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   // Track loaded metadata per tab to prevent refetching on tab switch
   const loadedMetadataRef = useRef({});
@@ -534,8 +535,10 @@ const Timetable = () => {
   const buildExportTablePayload = (tableKey) => {
     const tableIndex = Math.max(0, tables.indexOf(tableKey));
     const tableLabel = `Table ${tableIndex + 1}`;
+    const tableMeta = buildExportMetaForTable(tableKey);
     return {
       tableId: tableLabel,
+      meta: tableMeta,
       days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
       timeSlots,
       batchesByTable: {
@@ -587,79 +590,108 @@ const Timetable = () => {
     setShowExportModal(false);
   };
 
+  // Fullscreen toggle function
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch((err) => {
+        console.error('Error attempting to enable fullscreen:', err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().then(() => {
+          setIsFullscreen(false);
+        });
+      }
+    }
+  };
+
+  // Listen for fullscreen changes (e.g., user pressing ESC)
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       <Header />
       
-      {/* Floating Teacher & Room Conflict Warnings */}
-      <div className="fixed top-20 right-4 flex flex-col gap-3 z-50 animate-fadeInRight">
-        <div className={`p-3 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-300 border-l-4 ${
-          stats.teacherConflicts > 0 
-            ? "bg-red-50 border-red-500 text-red-900" 
-            : "bg-green-50 border-green-500 text-green-900"
-        }`}>
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            {stats.teacherConflicts > 0 ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
-            <span>Teachers: {stats.teacherConflicts > 0 ? `${stats.teacherConflicts} Conflicts` : 'Clear'}</span>
-          </div>
-        </div>
-        <div className={`p-3 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-300 border-l-4 ${
-          stats.roomConflicts > 0 
-            ? "bg-red-50 border-red-500 text-red-900" 
-            : "bg-green-50 border-green-500 text-green-900"
-        }`}>
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            {stats.roomConflicts > 0 ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
-            <span>Rooms: {stats.roomConflicts > 0 ? `${stats.roomConflicts} Conflicts` : 'Clear'}</span>
-          </div>
-        </div>
-        <div className={`p-3 rounded-lg shadow-lg backdrop-blur-sm transition-all duration-300 border-l-4 ${
-          validationErrorCount > 0 
-            ? "bg-orange-50 border-orange-500 text-orange-900" 
-            : "bg-green-50 border-green-500 text-green-900"
-        }`}>
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            {validationErrorCount > 0 ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
-            <span>Validation: {validationErrorCount > 0 ? `${validationErrorCount} Errors` : 'Valid'}</span>
-          </div>
-        </div>
-      </div>
+      {/* Fullscreen Toggle Button */}
+      <button
+        onClick={toggleFullscreen}
+        className="fixed bottom-6 right-6 z-50 p-3 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors shadow-lg"
+        title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+      >
+        {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+      </button>
+      
+      {/* Floating Teacher & Room Conflict Warnings - hidden, moved to sidebar */}
 
 
-      <div className="container mx-auto p-6 animate-fadeIn">
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {tables.map((tableId, index) => (
-            <div
-              key={tableId}
-              className={`px-5 py-2.5 cursor-pointer flex items-center rounded-md shadow transition-all duration-300 border ${
-                tableId === activeTable
-                  ? "bg-blue-600 text-white shadow-md border-blue-600"
-                  : "bg-white text-gray-700 hover:bg-gray-50 border-gray-200"
-              }`}
-              onClick={() => setActiveTable(tableId)}
+      <div className="flex gap-4 p-6 animate-fadeIn">
+        {/* Main Content - Timetable Area */}
+        <div className="flex-1 min-w-0">
+        {/* Tabs and Action Buttons Row */}
+        <div className="flex items-center justify-between gap-4 mb-4">
+          {/* Tabs */}
+          <div className="flex gap-1 overflow-x-auto pb-2">
+            {tables.map((tableId, index) => (
+              <div
+                key={tableId}
+                className={`px-3 py-1.5 cursor-pointer flex items-center rounded text-xs transition-all ${
+                  tableId === activeTable
+                    ? "bg-gray-100 text-gray-900 font-medium"
+                    : "text-gray-600 hover:bg-gray-50"
+                }`}
+                onClick={() => setActiveTable(tableId)}
+              >
+                <span>Table {index + 1}</span>
+                {tables.length > 1 && (
+                  <button
+                    className="ml-1.5 text-current opacity-60 hover:opacity-100 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeTable(tableId);
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button 
+              className="px-3 py-1.5 rounded text-xs text-gray-600 hover:bg-gray-50 transition-all flex items-center gap-1"
+              onClick={addTable}
             >
-              <span className="font-medium text-sm">Table {index + 1}</span>
-              {tables.length > 1 && (
-                <button
-                  className="ml-2 text-current opacity-70 hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeTable(tableId);
-                  }}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-          <button 
-            className="px-4 py-2.5 rounded-md bg-white text-gray-700 shadow border border-gray-200 hover:bg-blue-50 hover:border-blue-300 transition-all duration-300 flex items-center gap-1"
-            onClick={addTable}
-          >
-            <Plus size={16} />
-            <span className="text-sm font-medium">Add</span>
-          </button>
+              <Plus size={14} />
+              <span>Add</span>
+            </button>
+          </div>
+
+          {/* Action Buttons - Save & Export */}
+          <div className="flex gap-2 flex-shrink-0">
+            <button
+              className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium flex items-center gap-2"
+              onClick={saveToFirestore}
+              type="button"
+            >
+              <Save size={16} />
+              Save
+            </button>
+            <button
+              className="px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 transition-colors text-sm font-medium flex items-center gap-2"
+              onClick={() => setShowExportModal(true)}
+              type="button"
+            >
+              <Download size={16} />
+              Export
+            </button>
+          </div>
         </div>
 
         {/* Timetable Information Form */}
@@ -715,32 +747,57 @@ const Timetable = () => {
         {/* Add Time Slot Button */}
         <button 
           onClick={addTimeSlot} 
-          className="mt-6 px-5 py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-all duration-300 shadow font-medium text-sm flex items-center gap-2"
+          className="mt-6 px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors text-sm font-medium flex items-center gap-2"
         >
           <Plus size={16} />
           Add Time Slot
         </button>
 
-        {/* Action Buttons */}
-        <div className="mt-6 flex gap-3 flex-wrap">
-          <button
-            className="px-6 py-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 transition-all duration-300 shadow font-medium text-sm flex items-center gap-2"
-            onClick={saveToFirestore}
-            type="button"
-          >
-            <Save size={16} />
-            Save Timetable
-          </button>
-          <button
-            className="px-6 py-2.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-all duration-300 shadow font-medium text-sm flex items-center gap-2"
-            onClick={() => setShowExportModal(true)}
-            type="button"
-          >
-            <Download size={16} />
-            Export
-          </button>
         </div>
 
+        {/* Suggestions Sidebar */}
+        <div className="w-80 flex-shrink-0">
+          <div className="sticky top-6 space-y-4">
+            {/* Stats Card */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Status</h3>
+              <div className="space-y-2">
+                <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                  stats.teacherConflicts > 0 
+                    ? "bg-red-50 text-red-800" 
+                    : "bg-green-50 text-green-800"
+                }`}>
+                  {stats.teacherConflicts > 0 ? <AlertCircle size={14} /> : <CheckCircle size={14} />}
+                  <span className="font-medium">Teachers: {stats.teacherConflicts > 0 ? `${stats.teacherConflicts} Conflicts` : 'Clear'}</span>
+                </div>
+                <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                  stats.roomConflicts > 0 
+                    ? "bg-red-50 text-red-800" 
+                    : "bg-green-50 text-green-800"
+                }`}>
+                  {stats.roomConflicts > 0 ? <AlertCircle size={14} /> : <CheckCircle size={14} />}
+                  <span className="font-medium">Rooms: {stats.roomConflicts > 0 ? `${stats.roomConflicts} Conflicts` : 'Clear'}</span>
+                </div>
+                <div className={`p-2 rounded text-xs flex items-center gap-2 ${
+                  validationErrorCount > 0 
+                    ? "bg-orange-50 text-orange-800" 
+                    : "bg-green-50 text-green-800"
+                }`}>
+                  {validationErrorCount > 0 ? <AlertCircle size={14} /> : <CheckCircle size={14} />}
+                  <span className="font-medium">Validation: {validationErrorCount > 0 ? `${validationErrorCount} Errors` : 'Valid'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Suggestions Card */}
+            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Suggestions</h3>
+              <div className="space-y-3 text-xs text-gray-600">
+                <p>Suggestions will appear here based on your timetable context.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       
       <Footer />

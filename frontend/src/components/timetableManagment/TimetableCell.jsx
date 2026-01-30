@@ -416,8 +416,8 @@ const TimetableCell = ({
 
   return (
     <td 
-      className={`border border-gray-400 p-2 min-w-[140px] bg-white align-top relative group cursor-move transition-all ${
-        dragOver ? 'bg-blue-100 ring-2 ring-blue-400' : ''
+      className={`p-2 min-w-[140px] bg-white align-top relative group cursor-move transition-all ${
+        dragOver ? 'bg-gray-100 ring-2 ring-gray-400' : ''
       }`}
       draggable="true"
       onDragStart={handleDragStart}
@@ -427,14 +427,14 @@ const TimetableCell = ({
       onDrop={handleDrop}
     >
       {/* Drag Indicator - Top Left */}
-      <div className="absolute top-0.5 left-0.5 z-10">
-        <div className="w-4 h-4 flex items-center justify-center text-gray-400 opacity-40 group-hover:opacity-100 transition-all">
+      <div className="absolute top-1 left-1 z-10">
+        <div className="w-4 h-4 flex items-center justify-center text-gray-400 opacity-0 group-hover:opacity-100 transition-all">
           <GripVertical className="w-3 h-3" />
         </div>
       </div>
 
       {/* Action Buttons - Top Right */}
-      <div className="absolute top-0.5 right-0.5 z-10 flex gap-0.5">
+      <div className="absolute top-1 right-1 z-10 flex gap-1">
         {/* Delete Button */}
         <button
           onClick={(e) => {
@@ -442,11 +442,11 @@ const TimetableCell = ({
             e.stopPropagation();
             handleClearCell();
           }}
-          className="w-4 h-4 flex items-center justify-center bg-red-500 hover:bg-red-600 text-white rounded opacity-60 hover:opacity-100 transition-all"
+          className="w-5 h-5 flex items-center justify-center bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 rounded border border-gray-200 hover:border-red-300 opacity-0 group-hover:opacity-100 transition-all"
           title="Clear all entries"
           type="button"
         >
-          <Trash2 className="w-2.5 h-2.5" />
+          <Trash2 className="w-3 h-3" />
         </button>
         
         {/* Create Batch Button */}
@@ -456,11 +456,11 @@ const TimetableCell = ({
             e.stopPropagation();
             onCreateBatch(rowIndex, colIndex);
           }}
-          className="w-4 h-4 flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white rounded opacity-60 hover:opacity-100 transition-all"
+          className="w-5 h-5 flex items-center justify-center bg-white hover:bg-gray-900 text-gray-600 hover:text-white rounded border border-gray-200 hover:border-gray-900 opacity-0 group-hover:opacity-100 transition-all"
           title="Create new batch"
           type="button"
         >
-          <Plus className="w-2.5 h-2.5" />
+          <Plus className="w-3 h-3" />
         </button>
       </div>
 

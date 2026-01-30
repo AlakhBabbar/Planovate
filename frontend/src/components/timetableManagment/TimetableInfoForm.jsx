@@ -22,17 +22,13 @@ const TimetableInfoForm = ({
   handleTypeKeyDown,
 }) => {
   return (
-    <div className="bg-white rounded-lg shadow border border-gray-200 p-5 mb-6">
-      <h3 className="text-base font-semibold text-gray-800 mb-4 flex items-center gap-2">
-        <BookOpen size={20} className="text-blue-600" />
-        <span>Timetable Information</span>
-      </h3>
-      <div className="flex gap-3 items-center flex-wrap">
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 mb-4">
+      <div className="flex gap-2 items-center flex-wrap">
         <input
           ref={classInputRef}
           type="text"
           placeholder="Class"
-          className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
+          className="flex-1 min-w-[140px] border border-gray-300 focus:border-gray-400 px-3 py-2 rounded text-sm transition-all focus:ring-1 focus:ring-gray-300 outline-none"
           value={tabMetadata[activeTable]?.className || ""}
           onChange={(e) =>
             setTabMetadata((prev) => ({
@@ -47,7 +43,7 @@ const TimetableInfoForm = ({
           ref={branchInputRef}
           type="text"
           placeholder="Branch/Batch"
-          className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
+          className="flex-1 min-w-[140px] border border-gray-300 focus:border-gray-400 px-3 py-2 rounded text-sm transition-all focus:ring-1 focus:ring-gray-300 outline-none"
           value={tabMetadata[activeTable]?.branch || ""}
           onChange={(e) =>
             setTabMetadata((prev) => ({
@@ -60,7 +56,7 @@ const TimetableInfoForm = ({
         />
         <select
           ref={semesterInputRef}
-          className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
+          className="flex-1 min-w-[140px] border border-gray-300 focus:border-gray-400 px-3 py-2 rounded text-sm transition-all focus:ring-1 focus:ring-gray-300 outline-none"
           value={tabMetadata[activeTable]?.semester || ""}
           onChange={(e) =>
             setTabMetadata((prev) => ({
@@ -80,7 +76,7 @@ const TimetableInfoForm = ({
         </select>
         <select
           ref={typeInputRef}
-          className="flex-1 min-w-[180px] border border-gray-300 focus:border-blue-500 p-2.5 rounded-md transition-all duration-300 focus:ring-1 focus:ring-blue-300 outline-none text-sm"
+          className="flex-1 min-w-[140px] border border-gray-300 focus:border-gray-400 px-3 py-2 rounded text-sm transition-all focus:ring-1 focus:ring-gray-300 outline-none"
           value={tabMetadata[activeTable]?.type || ""}
           onChange={(e) =>
             setTabMetadata((prev) => ({
@@ -97,14 +93,14 @@ const TimetableInfoForm = ({
         </select>
         <button
           onClick={onBrowseClick}
-          className="px-5 py-2.5 bg-purple-600 text-white rounded-md hover:bg-purple-700 hover:cursor-pointer transition-all duration-300 shadow whitespace-nowrap font-medium text-sm flex items-center gap-2"
+          className="px-3 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-all text-sm font-medium flex items-center gap-1.5"
         >
-          <FolderSearch size={16} />
+          <FolderSearch size={14} />
           Browse
         </button>
         {isLoadingExisting && (
           <div className="flex items-center">
-            <div className="animate-spin rounded-full h-6 w-6 border-3 border-blue-500 border-t-transparent"></div>
+            <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-400 border-t-transparent"></div>
           </div>
         )}
       </div>
