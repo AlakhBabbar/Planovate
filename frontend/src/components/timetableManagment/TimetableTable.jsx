@@ -10,12 +10,16 @@ const TimetableTable = ({
   courseOptions,
   teacherOptions,
   roomOptions,
-  onCreateBatch, 
+  onCreateBatch,
+  onRemoveBatch,
   onUpdateBatch,
   onValidationChange,
   firstCellRef,
   onCopyCell,
-  onMoveCell
+  onMoveCell,
+  curriculumData,
+  allCoursesRaw,
+  allTeachersRaw,
 }) => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -40,7 +44,7 @@ const TimetableTable = ({
         </thead>
         <tbody>
           {timeSlots.map((slot, rowIndex) => (
-            <tr key={rowIndex} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+            <tr key={rowIndex} className="border-b border-gray-200">
               <td className="sticky left-0 z-10 p-3 font-medium text-gray-600 bg-gray-50 text-xs whitespace-nowrap border-r border-gray-200">
                 {slot}
               </td>
@@ -57,11 +61,16 @@ const TimetableTable = ({
                   teacherOptions={teacherOptions}
                   roomOptions={roomOptions}
                   onCreateBatch={onCreateBatch}
+                  onRemoveBatch={onRemoveBatch}
                   onUpdateBatch={onUpdateBatch}
                   onValidationChange={onValidationChange}
                   isFirstCell={rowIndex === 0 && colIndex === 0}
                   firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}                  onCopyCell={onCopyCell}
-                  onMoveCell={onMoveCell}                />
+                  onMoveCell={onMoveCell}
+                  curriculumData={curriculumData}
+                  allCoursesRaw={allCoursesRaw}
+                  allTeachersRaw={allTeachersRaw}
+                />
               ))}
             </tr>
           ))}

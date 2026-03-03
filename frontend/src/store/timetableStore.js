@@ -16,6 +16,9 @@ const useTimetableStore = create((set, get) => ({
   teacherOptions: [],
   roomOptions: [],
   semesterOptions: [],
+  // Raw objects (needed for curriculum-aware filtering in cells)
+  allCoursesRaw: [],
+  allTeachersRaw: [],
   
   // Timetables cache
   allTimetables: [],
@@ -72,6 +75,8 @@ const useTimetableStore = create((set, get) => ({
         semesterOptions,
         teacherOptions,
         roomOptions,
+        allCoursesRaw: courses ?? [],
+        allTeachersRaw: teachers ?? [],
         isOptionsLoaded: true,
         isLoadingOptions: false,
       });

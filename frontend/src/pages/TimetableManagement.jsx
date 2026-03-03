@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2, Lock } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import TimetableTable from "../components/timetableManagment/TimetableTable";
@@ -19,7 +19,7 @@ import {
   generateNextTimeSlot,
   DEFAULT_TIME_SLOTS,
 } from "../utils/timetableUIHelpers";
-import { courseService, roomService, teacherService, timetableService } from "../firebase/services";
+import { courseService, roomService, teacherService, timetableService, settingsService, curriculumService } from "../firebase/services";
 import { resolveBatchDataForDisplay, convertDisplayToIds } from "../utils/idDisplayHelpers";
 import { validateAllBatchData, hasValidationErrors, getValidationSummary } from "../utils/validationHelpers";
 
@@ -28,7 +28,7 @@ const generateUniqueTableId = () => `table_${Date.now()}_${Math.random().toStrin
 
 const Timetable = () => {
   // Zustand store for global options
-  const { courseOptions, teacherOptions, roomOptions, semesterOptions, fetchOptions } = useTimetableStore();
+  const { courseOptions, teacherOptions, roomOptions, semesterOptions, fetchOptions, fetchTimetables, allCoursesRaw, allTeachersRaw } = useTimetableStore();
   
   // Generate initial unique table ID
   const [tables, setTables] = useState(() => [generateUniqueTableId()]);
@@ -43,6 +43,13 @@ const Timetable = () => {
   const [showBrowseModal, setShowBrowseModal] = useState(false);
   const [timeSlots, setTimeSlots] = useState(DEFAULT_TIME_SLOTS);
 
+  // Programs and branches from settings
+  const [programs, setPrograms] = useState([]);
+  const [allBranches, setAllBranches] = useState([]);
+
+  // Curriculum for the active tab's class (used to filter course/teacher dropdowns)
+  const [activeCurriculum, setActiveCurriculum] = useState(null);
+
   const [batches, setBatches] = useState({});
   const [batchData, setBatchData] = useState({});
   const [conflicts, setConflicts] = useState({});
@@ -54,8 +61,6 @@ const Timetable = () => {
   const loadedMetadataRef = useRef({});
   
   // Refs for keyboard navigation
-  const classInputRef = useRef(null);
-  const branchInputRef = useRef(null);
   const semesterInputRef = useRef(null);
   const typeInputRef = useRef(null);
   const firstCellRef = useRef(null);
@@ -75,6 +80,43 @@ const Timetable = () => {
   useEffect(() => {
     fetchOptions();
   }, [fetchOptions]);
+
+  // Pre-load timetables list so auto-load can match by fields (same data Browse uses)
+  useEffect(() => {
+    fetchTimetables();
+  }, [fetchTimetables]);
+
+  // Fetch programs and branches from settings
+  useEffect(() => {
+    settingsService.getAllSettings().then((settings) => {
+      setPrograms(settings.programs || []);
+      setAllBranches(settings.branches || []);
+    }).catch((err) => console.error("Error loading settings:", err));
+  }, []);
+
+  // Fetch curriculum for the active tab whenever its metadata changes
+  useEffect(() => {
+    const meta = tabMetadata[activeTable] || {};
+    if (!meta.className || !meta.branch || !meta.semester || !meta.type) {
+      setActiveCurriculum(null);
+      return;
+    }
+    // Try to find a matching curriculum by field values (case-insensitive)
+    curriculumService.listCurriculums().then((list) => {
+      const norm = (v) => String(v ?? "").trim().toLowerCase();
+      const found = (list || []).find(
+        (c) =>
+          norm(c.class) === norm(meta.className) &&
+          norm(c.branch) === norm(meta.branch) &&
+          norm(c.semester) === norm(meta.semester) &&
+          norm(c.type) === norm(meta.type)
+      );
+      setActiveCurriculum(found || null);
+    }).catch((err) => {
+      console.error("Error fetching curriculum:", err);
+      setActiveCurriculum(null);
+    });
+  }, [tabMetadata[activeTable]?.className, tabMetadata[activeTable]?.branch, tabMetadata[activeTable]?.semester, tabMetadata[activeTable]?.type, activeTable]);
 
   // Check for existing timetable when branch, class, and semester are filled for current tab
   useEffect(() => {
@@ -106,14 +148,46 @@ const Timetable = () => {
       }
 
       setIsLoadingExisting(true);
-      
-      const existingTimetable = await checkExistingTimetable(
-        currentMeta.className,
-        currentMeta.branch,
-        currentMeta.semester,
-        currentMeta.type,
-        timetableService
+
+      // Find a matching timetable from the already-loaded list first.
+      // This mirrors the Browse approach: use the STORED timetableId rather than
+      // regenerating it from the field values (which may differ in formatting,
+      // e.g. semester "1" stored vs "Sem 1" in course documents).
+      // Read directly from store state (not closure) to always get the latest list.
+      const { allTimetables: latestTimetables } = useTimetableStore.getState();
+      const norm = (v) => String(v ?? "").trim().toLowerCase();
+      const matched = (latestTimetables || []).find(
+        (tt) =>
+          norm(tt.class) === norm(currentMeta.className) &&
+          norm(tt.branch) === norm(currentMeta.branch) &&
+          norm(tt.semester) === norm(currentMeta.semester) &&
+          norm(tt.type) === norm(currentMeta.type)
       );
+
+      let existingTimetable = null;
+      if (matched?.timetableId) {
+        // Load directly via the real stored ID (same as Browse does)
+        const raw = await timetableService.loadTimetable(matched.timetableId);
+        if (raw) {
+          existingTimetable = {
+            ...raw,
+            timetableId: matched.timetableId,
+            tables: raw.tables || ["Table 1"],
+            timeSlots: raw.timeSlots || DEFAULT_TIME_SLOTS,
+            batchesByTable: raw.batchesByTable || {},
+            batchDataByTable: raw.batchDataByTable || {},
+          };
+        }
+      } else {
+        // Fallback: try generating the ID from field values (works when strings match exactly)
+        existingTimetable = await checkExistingTimetable(
+          currentMeta.className,
+          currentMeta.branch,
+          currentMeta.semester,
+          currentMeta.type,
+          timetableService
+        );
+      }
       
       if (cancelled) return;
 
@@ -215,6 +289,33 @@ const Timetable = () => {
 
   const createBatch = (rowIndex, colIndex) => {
     setBatches((prev) => createBatchInCell(prev, activeTable, rowIndex, colIndex));
+  };
+
+  const removeBatch = (rowIndex, colIndex, batchIndex) => {
+    const key = `${rowIndex}-${colIndex}`;
+    const currentCount = (batches[activeTable] || {})[key] || 1;
+    if (currentCount <= 1) return; // nothing to remove
+
+    // Shift batch data: move entries after batchIndex down by 1
+    setBatchData((prev) => {
+      const tableData = { ...(prev[activeTable] || {}) };
+      // Shift batches above batchIndex down
+      for (let i = batchIndex; i < currentCount - 1; i++) {
+        tableData[`${rowIndex}-${colIndex}-${i}`] = tableData[`${rowIndex}-${colIndex}-${i + 1}`] || {};
+      }
+      // Remove the last (now duplicated) entry
+      delete tableData[`${rowIndex}-${colIndex}-${currentCount - 1}`];
+      return { ...prev, [activeTable]: tableData };
+    });
+
+    // Decrement batch count
+    setBatches((prev) => ({
+      ...prev,
+      [activeTable]: {
+        ...(prev[activeTable] || {}),
+        [key]: currentCount - 1,
+      },
+    }));
   };
 
   const updateBatch = (rowIndex, colIndex, batchIndex, field, value) => {
@@ -354,21 +455,11 @@ const Timetable = () => {
   const activeValidationErrors = validationErrors[activeTable] || {};
   const validationErrorCount = Object.keys(activeValidationErrors).length;
 
+  // Metadata completeness — all four fields must be filled to unlock the grid
+  const activeMetadata = tabMetadata[activeTable] || {};
+  const isMetadataComplete = !!(activeMetadata.className && activeMetadata.branch && activeMetadata.semester && activeMetadata.type);
+
   // Keyboard navigation handlers
-  const handleClassKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      branchInputRef.current?.focus();
-    }
-  };
-
-  const handleBranchKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      semesterInputRef.current?.focus();
-    }
-  };
-
   const handleSemesterKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -702,14 +793,12 @@ const Timetable = () => {
           semesterOptions={semesterOptions}
           isLoadingExisting={isLoadingExisting}
           onBrowseClick={() => setShowBrowseModal(true)}
-          classInputRef={classInputRef}
-          branchInputRef={branchInputRef}
           semesterInputRef={semesterInputRef}
           typeInputRef={typeInputRef}
-          handleClassKeyDown={handleClassKeyDown}
-          handleBranchKeyDown={handleBranchKeyDown}
           handleSemesterKeyDown={handleSemesterKeyDown}
           handleTypeKeyDown={handleTypeKeyDown}
+          programs={programs}
+          allBranches={allBranches}
         />
 
         {/* Browse Timetables Modal */}
@@ -726,23 +815,42 @@ const Timetable = () => {
           onConfirm={handleExportConfirm}
         />
 
-        {/* Timetable Grid */}
-        <TimetableTable
-          timeSlots={timeSlots}
-          batches={batches[activeTable] || {}}
-          batchData={batchData[activeTable] || {}}
-          conflicts={conflicts[activeTable] || {}}
-          validationErrors={validationErrors[activeTable] || {}}
-          courseOptions={courseOptions}
-          teacherOptions={teacherOptions}
-          roomOptions={roomOptions}
-          onCreateBatch={createBatch}
-          onUpdateBatch={updateBatch}
-          onValidationChange={handleValidationChange}
-          firstCellRef={firstCellRef}
-          onCopyCell={handleCopyCell}
-          onMoveCell={handleMoveCell}
-        />
+        {/* Timetable Grid — locked until all metadata is filled */}
+        <div className="relative">
+          <TimetableTable
+            timeSlots={timeSlots}
+            batches={batches[activeTable] || {}}
+            batchData={batchData[activeTable] || {}}
+            conflicts={conflicts[activeTable] || {}}
+            validationErrors={validationErrors[activeTable] || {}}
+            courseOptions={courseOptions}
+            teacherOptions={teacherOptions}
+            roomOptions={roomOptions}
+            onCreateBatch={createBatch}
+            onRemoveBatch={removeBatch}
+            onUpdateBatch={updateBatch}
+            onValidationChange={handleValidationChange}
+            firstCellRef={firstCellRef}
+            onCopyCell={handleCopyCell}
+            onMoveCell={handleMoveCell}
+            curriculumData={activeCurriculum}
+            allCoursesRaw={allCoursesRaw}
+            allTeachersRaw={allTeachersRaw}
+          />
+          {!isMetadataComplete && (
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg z-10 pointer-events-all">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="p-3 bg-gray-100 rounded-full">
+                  <Lock size={24} className="text-gray-400" />
+                </div>
+                <p className="text-sm font-medium text-gray-600">Timetable grid is locked</p>
+                <p className="text-xs text-gray-400 max-w-xs">
+                  Fill in all fields above — Program, Branch/Batch, Semester, and Type — to unlock the grid.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Add Time Slot Button */}
         <button 

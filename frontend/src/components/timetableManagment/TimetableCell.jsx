@@ -1,7 +1,361 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Plus, AlertCircle, Trash2, Copy, Move, X, GripVertical } from "lucide-react";
 import { validateCourse, validateTeacher, validateRoom } from "../../utils/validationHelpers";
 import { getCourseIdFromDisplay, getTeacherIdFromDisplay, getRoomIdFromDisplay } from "../../utils/idDisplayHelpers";
+
+/**
+ * Smart dropdown for teachers with three sections:
+ * 1. Assigned — teachers linked to the selected course in the curriculum
+ * 2. Same department — teachers sharing the course's department
+ * 3. Other departments — remaining teachers, grouped by their department
+ */
+const TeacherCombobox = ({
+  value,
+  onChange,
+  onKeyDown,
+  groups,
+  inputRef,
+  className,
+  placeholder,
+  title,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 200 });
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const internalInputRef = useRef(null);
+  const containerRef = useRef(null);
+  const dropRef = useRef(null);
+
+  // Let parent register the input DOM node via callback ref
+  useEffect(() => {
+    if (typeof inputRef === "function") inputRef(internalInputRef.current);
+  });
+
+  // Close when clicking outside
+  useEffect(() => {
+    const handleOuter = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOuter);
+    return () => document.removeEventListener("mousedown", handleOuter);
+  }, []);
+
+  // Reset highlight when dropdown opens/closes or filter changes
+  useEffect(() => {
+    setHighlightIdx(-1);
+  }, [open, value]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightIdx < 0 || !dropRef.current) return;
+    const el = dropRef.current.querySelector(`[data-idx="${highlightIdx}"]`);
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [highlightIdx]);
+
+  // Position the dropdown below the container div
+  const updatePos = () => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropPos({
+        top: rect.bottom,
+        left: rect.left,
+        width: Math.max(220, rect.width),
+      });
+    }
+  };
+
+  const filterStr = (value || "").toLowerCase();
+  const filterOpts = (opts) =>
+    opts.filter((o) => !filterStr || o.toLowerCase().includes(filterStr));
+
+  const { assigned = [], courseDept, sameDept = [], otherDepts = {} } = groups;
+  const fAssigned = filterOpts(assigned);
+  const fSameDept = filterOpts(sameDept);
+  const fOtherDepts = Object.fromEntries(
+    Object.entries(otherDepts)
+      .map(([dept, ts]) => [dept, filterOpts(ts)])
+      .filter(([, ts]) => ts.length > 0)
+  );
+
+  // Flat list of all visible options (for keyboard navigation)
+  const flatOptions = [
+    ...fAssigned,
+    ...fSameDept,
+    ...Object.values(fOtherDepts).flat(),
+  ];
+  const hasOptions = flatOptions.length > 0;
+
+  const handleSelect = (val) => {
+    onChange(val);
+    setOpen(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (open) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightIdx((i) => Math.min(i + 1, flatOptions.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightIdx((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" && highlightIdx >= 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleSelect(flatOptions[highlightIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+    }
+    onKeyDown && onKeyDown(e);
+  };
+
+  // Build a continuous flat index across groups for highlighting
+  let flatIdx = 0;
+  const renderGroup = (items, headerEl, hoverClass) =>
+    items.length > 0 ? (
+      <React.Fragment>
+        {headerEl}
+        {items.map((t) => {
+          const idx = flatIdx++;
+          const isHl = idx === highlightIdx;
+          return (
+            <div
+              key={idx}
+              data-idx={idx}
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(t); }}
+              onMouseEnter={() => setHighlightIdx(idx)}
+              className={`px-2 py-1 cursor-pointer text-gray-800 ${
+                isHl ? "bg-gray-200" : hoverClass
+              }`}
+            >
+              {t}
+            </div>
+          );
+        })}
+      </React.Fragment>
+    ) : null;
+
+  const dropdown = open && hasOptions
+    ? createPortal(
+        <div
+          ref={dropRef}
+          style={{
+            position: "fixed",
+            top: dropPos.top,
+            left: dropPos.left,
+            width: dropPos.width,
+            zIndex: 9999,
+          }}
+          className="max-h-52 overflow-y-auto bg-white border border-gray-200 rounded shadow-lg text-[10px] ring-1 ring-black/5"
+        >
+          {(() => { flatIdx = 0; return null; })()}
+          {fAssigned.length > 0 && renderGroup(
+            fAssigned,
+            <div className="sticky top-0 px-2 py-0.5 bg-amber-50 text-amber-700 font-semibold text-[9px] uppercase tracking-wide border-b border-amber-100">
+              ★ Assigned
+            </div>,
+            "hover:bg-amber-50"
+          )}
+          {fSameDept.length > 0 && renderGroup(
+            fSameDept,
+            <div className="sticky top-0 px-2 py-0.5 bg-blue-50 text-blue-700 font-semibold text-[9px] uppercase tracking-wide border-b border-blue-100">
+              {courseDept || "Same Dept"}
+            </div>,
+            "hover:bg-blue-50"
+          )}
+          {Object.entries(fOtherDepts).map(([dept, teachers]) =>
+            renderGroup(
+              teachers,
+              <div key={dept} className="sticky top-0 px-2 py-0.5 bg-gray-50 text-gray-500 font-semibold text-[9px] uppercase tracking-wide border-b border-gray-100">
+                {dept}
+              </div>,
+              "hover:bg-gray-50"
+            )
+          )}
+        </div>,
+        document.body
+      )
+    : null;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        ref={internalInputRef}
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); updatePos(); setOpen(true); }}
+        onClick={() => { updatePos(); setOpen(true); }}
+        onBlur={() => setOpen(false)}
+        onKeyDown={handleKeyDown}
+        className={className}
+        title={title}
+        autoComplete="off"
+      />
+      {dropdown}
+    </div>
+  );
+};
+
+/**
+ * Simple portal-based combobox for flat option lists (Course, Room).
+ * Same positioning/look as TeacherCombobox but with a single flat list.
+ */
+const SimpleCombobox = ({
+  value,
+  onChange,
+  onKeyDown,
+  options,
+  inputRef,
+  className,
+  placeholder,
+  title,
+}) => {
+  const [open, setOpen] = useState(false);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 200 });
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const internalInputRef = useRef(null);
+  const containerRef = useRef(null);
+  const dropRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof inputRef === "function") inputRef(internalInputRef.current);
+  });
+
+  useEffect(() => {
+    const handleOuter = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOuter);
+    return () => document.removeEventListener("mousedown", handleOuter);
+  }, []);
+
+  // Reset highlight when dropdown opens/closes or filter changes
+  useEffect(() => {
+    setHighlightIdx(-1);
+  }, [open, value]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightIdx < 0 || !dropRef.current) return;
+    const el = dropRef.current.querySelector(`[data-idx="${highlightIdx}"]`);
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }, [highlightIdx]);
+
+  const updatePos = () => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropPos({
+        top: rect.bottom,
+        left: rect.left,
+        width: Math.max(220, rect.width),
+      });
+    }
+  };
+
+  const filterStr = (value || "").toLowerCase();
+  const filtered = (options || []).filter(
+    (o) => !filterStr || o.toLowerCase().includes(filterStr)
+  );
+
+  const handleSelect = (val) => {
+    onChange(val);
+    setOpen(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (open) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightIdx((i) => Math.min(i + 1, filtered.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        setHighlightIdx((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" && highlightIdx >= 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleSelect(filtered[highlightIdx]);
+        return;
+      }
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+    }
+    onKeyDown && onKeyDown(e);
+  };
+
+  const dropdown =
+    open && filtered.length > 0
+      ? createPortal(
+          <div
+            ref={dropRef}
+            style={{
+              position: "fixed",
+              top: dropPos.top,
+              left: dropPos.left,
+              width: dropPos.width,
+              zIndex: 9999,
+            }}
+            className="max-h-52 overflow-y-auto bg-white border border-gray-200 rounded shadow-lg text-[10px] ring-1 ring-black/5"
+          >
+            {filtered.map((opt, i) => (
+              <div
+                key={i}
+                data-idx={i}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(opt); }}
+                onMouseEnter={() => setHighlightIdx(i)}
+                className={`px-2 py-1 cursor-pointer text-gray-800 ${
+                  i === highlightIdx ? "bg-gray-200" : "hover:bg-gray-50"
+                }`}
+              >
+                {opt}
+              </div>
+            ))}
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        ref={internalInputRef}
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => { onChange(e.target.value); updatePos(); setOpen(true); }}
+        onClick={() => { updatePos(); setOpen(true); }}
+        onBlur={() => setOpen(false)}
+        onKeyDown={handleKeyDown}
+        className={className}
+        title={title}
+        autoComplete="off"
+      />
+      {dropdown}
+    </div>
+  );
+};
 
 const TimetableCell = ({ 
   rowIndex, 
@@ -15,19 +369,104 @@ const TimetableCell = ({
   roomOptions,
   onCreateBatch, 
   onUpdateBatch,
+  onRemoveBatch,
   onValidationChange,
   isFirstCell,
   firstCellRef,
   onCopyCell,
-  onMoveCell
+  onMoveCell,
+  curriculumData,
+  allCoursesRaw,
+  allTeachersRaw,
 }) => {
   const key = `${rowIndex}-${colIndex}`;
   const batchCount = batches[key] || 1;
   const showBatchField = batchCount > 1;
 
+  // A cell is "filled" if any of its batches has at least one value
+  const isFilled = Array.from({ length: batchCount }).some((_, bi) => {
+    const d = batchData[`${rowIndex}-${colIndex}-${bi}`] || {};
+    return !!(d.course || d.teacher || d.room);
+  });
+
   const courses = Array.isArray(courseOptions) ? courseOptions : [];
   const teachers = Array.isArray(teacherOptions) ? teacherOptions : [];
   const rooms = Array.isArray(roomOptions) ? roomOptions : [];
+
+  // --- Curriculum-aware course list ---
+  // Only show courses assigned to this class in the curriculum (falls back to all).
+  const filteredCourses = React.useMemo(() => {
+    const currCourses = curriculumData?.courses;
+    if (!currCourses?.length || !allCoursesRaw?.length) return courses;
+    const ids = new Set(currCourses.map((c) => String(c.courseId)));
+    const names = allCoursesRaw
+      .filter((c) => ids.has(String(c.unid)))
+      .map((c) => c.ID || c.code || c.name)
+      .filter(Boolean);
+    return names.length > 0 ? names : courses;
+  }, [curriculumData, allCoursesRaw, courses]);
+
+  // --- Teacher groups for a selected course display name ---
+  const getTeacherGroups = React.useCallback(
+    (selectedCourseDisplay) => {
+      const empty = { assigned: [], courseDept: null, sameDept: [], otherDepts: {} };
+      if (!allTeachersRaw?.length) {
+        // No raw data: return flat groups by nothing
+        const otherDepts = {};
+        teachers.forEach((t) => {
+          const dept = "All Teachers";
+          if (!otherDepts[dept]) otherDepts[dept] = [];
+          otherDepts[dept].push(t);
+        });
+        return { ...empty, otherDepts };
+      }
+
+      // Find raw course object
+      const rawCourse = selectedCourseDisplay
+        ? allCoursesRaw?.find(
+            (c) => (c.ID || c.code || c.name) === selectedCourseDisplay
+          )
+        : null;
+
+      const courseDept = rawCourse?.department || null;
+
+      // Assigned teacher IDs from curriculum
+      const currEntry = rawCourse
+        ? curriculumData?.courses?.find(
+            (c) => String(c.courseId) === String(rawCourse.unid)
+          )
+        : null;
+      const assignedIds = new Set((currEntry?.teacherIds || []).map(String));
+
+      const assigned = Array.from(assignedIds)
+        .map((tid) => {
+          const t = allTeachersRaw.find((t) => String(t.unid) === tid);
+          return t ? t.ID || t.name : null;
+        })
+        .filter(Boolean);
+
+      const remaining = allTeachersRaw.filter((t) => !assignedIds.has(String(t.unid)));
+
+      const sameDept = courseDept
+        ? remaining
+            .filter((t) => t.department === courseDept)
+            .map((t) => t.ID || t.name)
+            .filter(Boolean)
+        : [];
+
+      const otherDepts = {};
+      remaining
+        .filter((t) => !courseDept || t.department !== courseDept)
+        .forEach((t) => {
+          const dept = t.department || "Other";
+          if (!otherDepts[dept]) otherDepts[dept] = [];
+          otherDepts[dept].push(t.ID || t.name);
+        });
+
+      return { assigned, courseDept, sameDept, otherDepts };
+    },
+    [curriculumData, allCoursesRaw, allTeachersRaw, teachers]
+  );
   
   // Create refs for inputs within each batch
   const inputRefs = useRef({});
@@ -112,6 +551,16 @@ const TimetableCell = ({
       onUpdateBatch(rowIndex, colIndex, i, 'teacherId', '');
       onUpdateBatch(rowIndex, colIndex, i, 'roomId', '');
     }
+  };
+
+  const handleClearBatch = (batchIndex) => {
+    onUpdateBatch(rowIndex, colIndex, batchIndex, 'batchName', '');
+    onUpdateBatch(rowIndex, colIndex, batchIndex, 'course', '');
+    onUpdateBatch(rowIndex, colIndex, batchIndex, 'teacher', '');
+    onUpdateBatch(rowIndex, colIndex, batchIndex, 'room', '');
+    onUpdateBatch(rowIndex, colIndex, batchIndex, 'courseId', '');
+    onUpdateBatch(rowIndex, colIndex, batchIndex, 'teacherId', '');
+    onUpdateBatch(rowIndex, colIndex, batchIndex, 'roomId', '');
   };
 
   // Handle input change with validation
@@ -416,8 +865,12 @@ const TimetableCell = ({
 
   return (
     <td 
-      className={`p-2 min-w-[140px] bg-white align-top relative group cursor-move transition-all ${
-        dragOver ? 'bg-gray-100 ring-2 ring-gray-400' : ''
+      className={`p-2 min-w-[140px] align-top relative group cursor-move transition-all border-r border-gray-200 ${
+        dragOver
+          ? 'bg-gray-100 ring-2 ring-gray-400'
+          : isFilled
+          ? 'bg-white'
+          : 'bg-gray-50 opacity-50 hover:opacity-100'
       }`}
       draggable="true"
       onDragStart={handleDragStart}
@@ -435,19 +888,21 @@ const TimetableCell = ({
 
       {/* Action Buttons - Top Right */}
       <div className="absolute top-1 right-1 z-10 flex gap-1">
-        {/* Delete Button */}
-        <button
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleClearCell();
-          }}
-          className="w-5 h-5 flex items-center justify-center bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 rounded border border-gray-200 hover:border-red-300 opacity-0 group-hover:opacity-100 transition-all"
-          title="Clear all entries"
-          type="button"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
+        {/* Delete Button — only shown when there is a single batch */}
+        {batchCount === 1 && (
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleClearCell();
+            }}
+            className="w-5 h-5 flex items-center justify-center bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 rounded border border-gray-200 hover:border-red-300 opacity-0 group-hover:opacity-100 transition-all"
+            title="Clear cell"
+            type="button"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
         
         {/* Create Batch Button */}
         <button
@@ -556,7 +1011,18 @@ const TimetableCell = ({
           const isRoomOldFormat = batch.room && !batch.roomId;
 
           return (
-            <div key={batchIndex} className="flex-1 min-w-[70px] p-1 space-y-1">
+            <div key={batchIndex} className="relative group/batch flex-1 min-w-[70px] p-1 space-y-1">
+              {/* Per-batch delete — only shown when there are multiple batches */}
+              {batchCount > 1 && (
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemoveBatch(rowIndex, colIndex, batchIndex); }}
+                  className="absolute top-0 left-1/2 -translate-x-1/2 z-10 w-4 h-4 flex items-center justify-center bg-white hover:bg-red-50 text-gray-400 hover:text-red-500 rounded border border-gray-200 hover:border-red-300 opacity-0 group-hover/batch:opacity-100 transition-all"
+                  title="Remove this split"
+                  type="button"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+              )}
               {/* Batch Name Field - only shown when more than 1 batch */}
               {showBatchField && (
                 <input
@@ -578,20 +1044,19 @@ const TimetableCell = ({
 
               {/* Course Field */}
               <div className="relative">
-                <input
-                  ref={(el) => {
+                <SimpleCombobox
+                  value={batch.course || ""}
+                  onChange={(val) => {
+                    handleInputChange(batchIndex, 'course', val);
+                  }}
+                  onKeyDown={(e) => handleKeyDown(e, batchIndex, 'course')}
+                  options={filteredCourses}
+                  inputRef={(el) => {
                     inputRefs.current[`${batchIndex}-course`] = el;
-                    // If no batch field shown, course is the first input for first cell
                     if (isFirstCell && batchIndex === 0 && !showBatchField && firstCellRef) {
                       firstCellRef.current = el;
                     }
                   }}
-                  list={`courses-${rowIndex}-${colIndex}-${batchIndex}`}
-                  type="text"
-                  placeholder="Course"
-                  value={batch.course || ""}
-                  onChange={(e) => handleInputChange(batchIndex, 'course', e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e, batchIndex, 'course')}
                   className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
                     hasCourseError
                       ? "border-orange-500 bg-orange-50 focus:ring-orange-500 focus:border-orange-500"
@@ -599,6 +1064,7 @@ const TimetableCell = ({
                       ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
                       : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
                   }`}
+                  placeholder="Course"
                   title={
                     hasCourseError
                       ? `⚠️ ${validationInfo.course?.error || 'Invalid course'}`
@@ -610,37 +1076,31 @@ const TimetableCell = ({
                 {hasCourseError && (
                   <AlertCircle className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-orange-500" />
                 )}
-                <datalist id={`courses-${rowIndex}-${colIndex}-${batchIndex}`}>
-                  {courses.map((course, idx) => (
-                    <option key={idx} value={course} />
-                  ))}
-                </datalist>
               </div>
 
-              {/* Teacher Field */}
+              {/* Teacher Field — smart grouped combobox */}
               <div className="relative">
-                <input
-                  ref={(el) => inputRefs.current[`${batchIndex}-teacher`] = el}
-                  list={`teachers-${rowIndex}-${colIndex}-${batchIndex}`}
-                  type="text"
-                  placeholder="Teacher"
+                <TeacherCombobox
                   value={batch.teacher || ""}
-                  onChange={(e) => handleInputChange(batchIndex, 'teacher', e.target.value)}
+                  onChange={(val) => handleInputChange(batchIndex, 'teacher', val)}
                   onKeyDown={(e) => handleKeyDown(e, batchIndex, 'teacher')}
+                  groups={getTeacherGroups(batch.course || "")}
+                  inputRef={(el) => inputRefs.current[`${batchIndex}-teacher`] = el}
                   className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
                     hasTeacherError
                       ? "border-orange-500 bg-orange-50 focus:ring-orange-500 focus:border-orange-500"
-                      : hasTeacherConflict 
+                      : hasTeacherConflict
                       ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
                       : isTeacherOldFormat
                       ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
                       : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
                   }`}
+                  placeholder="Teacher"
                   title={
                     hasTeacherError
                       ? `⚠️ ${validationInfo.teacher?.error || 'Invalid teacher'}`
-                      : hasTeacherConflict 
-                      ? "⚠️ Conflict: Teacher assigned elsewhere at this time" 
+                      : hasTeacherConflict
+                      ? "⚠️ Conflict: Teacher assigned elsewhere at this time"
                       : isTeacherOldFormat
                       ? "⚠️ Not migrated - Using old format (no ID reference)"
                       : ""
@@ -649,37 +1109,31 @@ const TimetableCell = ({
                 {hasTeacherError && (
                   <AlertCircle className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-orange-500" />
                 )}
-                <datalist id={`teachers-${rowIndex}-${colIndex}-${batchIndex}`}>
-                  {teachers.map((teacher, idx) => (
-                    <option key={idx} value={teacher} />
-                  ))}
-                </datalist>
               </div>
 
               {/* Room Field */}
               <div className="relative">
-                <input
-                  ref={(el) => inputRefs.current[`${batchIndex}-room`] = el}
-                  list={`rooms-${rowIndex}-${colIndex}-${batchIndex}`}
-                  type="text"
-                  placeholder="Room"
+                <SimpleCombobox
                   value={batch.room || ""}
-                  onChange={(e) => handleInputChange(batchIndex, 'room', e.target.value)}
+                  onChange={(val) => handleInputChange(batchIndex, 'room', val)}
                   onKeyDown={(e) => handleKeyDown(e, batchIndex, 'room')}
+                  options={rooms}
+                  inputRef={(el) => inputRefs.current[`${batchIndex}-room`] = el}
                   className={`w-full text-[10px] px-1 py-0.5 border rounded focus:outline-none focus:ring-1 ${
                     hasRoomError
                       ? "border-orange-500 bg-orange-50 focus:ring-orange-500 focus:border-orange-500"
-                      : hasRoomConflict 
+                      : hasRoomConflict
                       ? "border-red-500 bg-red-50 focus:ring-red-400 focus:border-red-500"
                       : isRoomOldFormat
                       ? "border-red-900 bg-red-50 text-red-900 focus:ring-red-900 focus:border-red-900"
                       : "border-gray-300 focus:ring-blue-400 focus:border-blue-400"
                   }`}
+                  placeholder="Room"
                   title={
                     hasRoomError
                       ? `⚠️ ${validationInfo.room?.error || 'Invalid room'}`
-                      : hasRoomConflict 
-                      ? "⚠️ Conflict: Room assigned elsewhere at this time" 
+                      : hasRoomConflict
+                      ? "⚠️ Conflict: Room assigned elsewhere at this time"
                       : isRoomOldFormat
                       ? "⚠️ Not migrated - Using old format (no ID reference)"
                       : ""
@@ -688,11 +1142,6 @@ const TimetableCell = ({
                 {hasRoomError && (
                   <AlertCircle className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 text-orange-500" />
                 )}
-                <datalist id={`rooms-${rowIndex}-${colIndex}-${batchIndex}`}>
-                  {rooms.map((room, idx) => (
-                    <option key={idx} value={room} />
-                  ))}
-                </datalist>
               </div>
             </div>
           );

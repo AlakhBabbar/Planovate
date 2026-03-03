@@ -13,6 +13,7 @@ import Manage from "./pages/Manage";
 import RoomOccupancy from "./pages/RoomOccupancy";
 import TeacherOccupancy from "./pages/TeacherOccupancy";
 import ClassOccupancy from "./pages/ClassOccupancy";
+import AdminSettings from "./pages/AdminSettings";
 import DataMigration from "./temp/DataMigration";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -29,6 +30,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/teacher-occupancy" element={<TeacherOccupancy />} />
         <Route path="/class-occupancy" element={<ClassOccupancy />} />
         <Route path="/manage" element={<Manage />} />
+        <Route path="/admin-settings" element={<AdminSettings />} />
         <Route path="/bulk-upload" element={<BulkUpload />} />
         <Route path="/data-migration" element={<DataMigration />} />
       </Routes>

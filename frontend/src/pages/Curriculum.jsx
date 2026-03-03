@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Plus, X, List, Grid, Save, Trash2, Search } from "lucide-react";
+import { Plus, X, List, Grid, Save, Trash2, Search, BookOpen, Users } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { courseService } from "../firebase/services";
+import { courseService, teacherService, curriculumService } from "../firebase/services";
 import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase/firebaseConfig";
 
@@ -10,6 +10,7 @@ const Curriculum = () => {
   const [viewMode, setViewMode] = useState("cards");
   const [curriculum, setCurriculum] = useState([]);
   const [availableCourses, setAvailableCourses] = useState([]);
+  const [availableTeachers, setAvailableTeachers] = useState([]);
   const [selectedCurriculum, setSelectedCurriculum] = useState(null);
   const [showCourseSelector, setShowCourseSelector] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -29,16 +30,14 @@ const Curriculum = () => {
   useEffect(() => {
     fetchCurriculum();
     fetchAllCourses();
+    fetchAllTeachers();
   }, []);
 
   const fetchCurriculum = async () => {
     try {
-      const snapshot = await getDocs(collection(db, "curriculum"));
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setCurriculum(data);
+      // Fetch from new curriculums collection
+      const curriculums = await curriculumService.listCurriculums();
+      setCurriculum(curriculums);
     } catch (error) {
       console.error("Error fetching curriculum:", error);
     }
@@ -50,6 +49,15 @@ const Curriculum = () => {
       setAvailableCourses(courses);
     } catch (error) {
       console.error("Error fetching courses:", error);
+    }
+  };
+
+  const fetchAllTeachers = async () => {
+    try {
+      const teachers = await teacherService.listTeachers();
+      setAvailableTeachers(teachers);
+    } catch (error) {
+      console.error("Error fetching teachers:", error);
     }
   };
 
@@ -131,17 +139,47 @@ const Curriculum = () => {
     }
   };
 
-  const handleDeleteCurriculum = async (id) => {
+  const handleDeleteCurriculum = async (curriculumId) => {
     if (!confirm("Are you sure you want to delete this curriculum?")) return;
 
     try {
-      await deleteDoc(doc(db, "curriculum", id));
+      await curriculumService.deleteCurriculum(curriculumId);
       fetchCurriculum();
       alert("Curriculum deleted successfully!");
     } catch (error) {
       console.error("Error deleting curriculum:", error);
       alert("Failed to delete curriculum");
     }
+  };
+
+  const getCourseName = (courseId) => {
+    const course = availableCourses.find((c) => {
+      if (c.ID === courseId || String(c.ID) === String(courseId)) return true;
+      if (c.unid === courseId || String(c.unid) === String(courseId)) return true;
+      if (c.code === courseId || String(c.code) === String(courseId)) return true;
+      return false;
+    });
+    
+    if (course) {
+      const code = course.code || course.ID;
+      return course.name ? `${code} - ${course.name}` : code;
+    }
+    
+    return courseId;
+  };
+
+  const getTeacherName = (teacherId) => {
+    const teacher = availableTeachers.find((t) => {
+      if (t.ID === teacherId || String(t.ID) === String(teacherId)) return true;
+      if (t.unid === teacherId || String(t.unid) === String(teacherId)) return true;
+      return false;
+    });
+    
+    if (teacher) {
+      return teacher.name ? `${teacher.ID} - ${teacher.name}` : teacher.ID;
+    }
+    
+    return teacherId;
   };
 
   const handleEditCurriculum = (curriculum) => {
@@ -196,7 +234,7 @@ const Curriculum = () => {
   const filteredCurriculum = curriculum.filter(curr => {
     const search = searchTerm.toLowerCase();
     return (
-      curr.className?.toLowerCase().includes(search) ||
+      curr.class?.toLowerCase().includes(search) ||
       curr.branch?.toLowerCase().includes(search) ||
       curr.semester?.toLowerCase().includes(search) ||
       curr.type?.toLowerCase().includes(search)
@@ -415,13 +453,13 @@ const Curriculum = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredCurriculum.map((curriculum) => (
                   <div
-                    key={curriculum.id}
+                    key={curriculum.curriculumId}
                     className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
                   >
                     <div className="flex justify-between items-start mb-4">
-                      <div>
+                      <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {curriculum.className}
+                          {curriculum.class}
                         </h3>
                         <p className="text-sm text-gray-600">
                           {curriculum.branch} - Sem {curriculum.semester}
@@ -432,13 +470,7 @@ const Curriculum = () => {
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => handleEditCurriculum(curriculum)}
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCurriculum(curriculum.id)}
+                          onClick={() => handleDeleteCurriculum(curriculum.curriculumId)}
                           className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 size={18} />
@@ -450,19 +482,31 @@ const Curriculum = () => {
                       <div className="flex justify-between items-center mb-3">
                         <span className="text-sm font-medium text-gray-700">Courses</span>
                         <span className="text-sm text-gray-600">
-                          {curriculum.totalCredits || 0} Credits
+                          {curriculum.courses?.length || 0} courses
                         </span>
                       </div>
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {curriculum.courses?.map((course) => (
+                      <div className="space-y-3 max-h-64 overflow-y-auto">
+                        {curriculum.courses?.map((course, idx) => (
                           <div
-                            key={course.unid}
-                            className="text-sm p-2 bg-gray-50 rounded border border-gray-100"
+                            key={idx}
+                            className="text-sm p-3 bg-gray-50 rounded border border-gray-100"
                           >
-                            <div className="font-medium text-gray-900">{course.name}</div>
-                            <div className="text-gray-500 text-xs">
-                              {course.code} - {course.credits} Credits
+                            <div className="flex items-start gap-2 mb-2">
+                              <BookOpen className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium text-gray-900 break-words">
+                                  {getCourseName(course.courseId)}
+                                </div>
+                              </div>
                             </div>
+                            {course.teacherIds && course.teacherIds.length > 0 && (
+                              <div className="flex items-start gap-2 mt-2 pl-6">
+                                <Users className="w-3 h-3 text-gray-500 mt-0.5 flex-shrink-0" />
+                                <div className="text-xs text-gray-600 break-words">
+                                  {course.teacherIds.map(tid => getTeacherName(tid)).join(", ")}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                         {(!curriculum.courses || curriculum.courses.length === 0) && (
@@ -483,14 +527,13 @@ const Curriculum = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Semester</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Courses</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Credits</th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {filteredCurriculum.map((curriculum) => (
-                      <tr key={curriculum.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{curriculum.className}</td>
+                      <tr key={curriculum.curriculumId} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{curriculum.class}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{curriculum.branch}</td>
                         <td className="px-6 py-4 text-sm text-gray-600">{curriculum.semester}</td>
                         <td className="px-6 py-4 text-sm">
@@ -501,19 +544,12 @@ const Curriculum = () => {
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {curriculum.courses?.length || 0}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">{curriculum.totalCredits || 0}</td>
                         <td className="px-6 py-4 text-sm text-right">
                           <button
-                            onClick={() => handleEditCurriculum(curriculum)}
-                            className="text-blue-600 hover:text-blue-700 mr-3"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCurriculum(curriculum.id)}
+                            onClick={() => handleDeleteCurriculum(curriculum.curriculumId)}
                             className="text-red-600 hover:text-red-700"
                           >
-                            Delete
+                            <Trash2 size={18} />
                           </button>
                         </td>
                       </tr>
