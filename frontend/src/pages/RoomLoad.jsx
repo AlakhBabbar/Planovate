@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Building2, Plus, Trash2, Save, Search, Clock } from "lucide-react";
+import { Building2, Plus, Trash2, Save, Search, Clock, Calendar } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { roomService } from "../firebase/services";
+import RoomAvailability from "./RoomAvailability";
+import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
 
 const RoomLoad = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [faculties, setFaculties] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [filteredRooms, setFilteredRooms] = useState([]);
 
-  const [selectedFaculty, setSelectedFaculty] = useState("");
+  const [selectedFaculty, setSelectedFaculty] = useState(searchParams.get("faculty") || "");
 
   const [newFaculty, setNewFaculty] = useState("");
 
@@ -19,6 +24,29 @@ const RoomLoad = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+
+  const [activeTab, setActiveTab] = useState(
+    searchParams.get("tab") === "availability" ? "availability" : "rooms"
+  );
+
+  // keep URL in sync whenever tab or faculty changes
+  const updateSearchParams = (tab, faculty) => {
+    const params = {};
+    if (faculty) params.faculty = faculty;
+    if (tab && tab !== "rooms") params.tab = tab;
+    setSearchParams(params, { replace: true });
+  };
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    updateSearchParams(tab, selectedFaculty);
+  };
+
+  const handleFacultyChange = (faculty) => {
+    setSelectedFaculty(faculty);
+    updateSearchParams(activeTab, faculty);
+    fetchRooms(faculty);
+  };
 
   const [isAddRoomModalOpen, setIsAddRoomModalOpen] = useState(false);
   const [newRoom, setNewRoom] = useState({
@@ -59,6 +87,12 @@ const RoomLoad = () => {
 
   useEffect(() => {
     fetchFaculties();
+  }, []);
+
+  // if faculty was pre-loaded from URL, fetch its rooms on mount
+  useEffect(() => {
+    if (selectedFaculty) fetchRooms(selectedFaculty);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchFaculties = async () => {
@@ -330,7 +364,7 @@ const RoomLoad = () => {
       return;
     }
     
-    setSelectedFaculty(newFaculty);
+    handleFacultyChange(newFaculty);
     setFaculties([...faculties, newFaculty]);
     setNewFaculty("");
     setIsAddingFaculty(false);
@@ -378,8 +412,7 @@ const RoomLoad = () => {
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                       value={selectedFaculty}
                       onChange={(e) => {
-                        setSelectedFaculty(e.target.value);
-                        fetchRooms(e.target.value);
+                        handleFacultyChange(e.target.value);
                       }}
                     >
                       <option value="">Select Faculty</option>
@@ -424,8 +457,45 @@ const RoomLoad = () => {
             </div>
           </div>
 
-          {/* Search and Actions */}
+          {/* Tab Switcher */}
           {selectedFaculty && (
+            <div className="flex items-center gap-1 mb-6 bg-white border border-gray-200 rounded-lg p-1 shadow-sm w-fit">
+              <button
+                onClick={() => handleTabChange("rooms")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+                  activeTab === "rooms"
+                    ? "bg-gray-900 text-white font-medium"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                Rooms
+              </button>
+              <button
+                onClick={() => handleTabChange("availability")}
+                className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+                  activeTab === "availability"
+                    ? "bg-gray-900 text-white font-medium"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Availability
+              </button>
+            </div>
+          )}
+
+          {/* Availability sub-page */}
+          {selectedFaculty && activeTab === "availability" && (
+            <RoomAvailability
+              faculty={selectedFaculty}
+              rooms={rooms}
+              onRoomsUpdate={() => fetchRooms(selectedFaculty)}
+            />
+          )}
+
+          {/* Search and Actions */}
+          {selectedFaculty && activeTab === "rooms" && (
             <div className="mb-6 flex items-center justify-between gap-4">
               <div className="flex-1 max-w-md relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -458,7 +528,7 @@ const RoomLoad = () => {
           )}
 
           {/* Rooms Table */}
-          {selectedFaculty && (
+          {selectedFaculty && activeTab === "rooms" && (
             <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -531,11 +601,7 @@ const RoomLoad = () => {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {[
-                                          "7:00-7:55", "8:00-8:55", "9:00-9:55", "10:00-10:55",
-                                          "11:00-11:55", "12:00-12:55", "1:00-1:55", "2:00-2:55",
-                                          "3:00-3:55", "4:00-5:00"
-                                        ].map(time => (
+                                        {DEFAULT_TIME_SLOTS.map(time => (
                                           <tr key={time}>
                                             <td className="border border-gray-300 p-1 whitespace-nowrap">{time}</td>
                                             {["mon", "tue", "wed", "thu", "fri", "sat"].map(day => (
@@ -664,11 +730,7 @@ const RoomLoad = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {[
-                        "7:00-7:55", "8:00-8:55", "9:00-9:55", "10:00-10:55",
-                        "11:00-11:55", "12:00-12:55", "1:00-1:55", "2:00-2:55",
-                        "3:00-3:55", "4:00-5:00"
-                      ].map(time => (
+                      {DEFAULT_TIME_SLOTS.map(time => (
                         <tr key={time}>
                           <td className="border border-gray-300 p-2 whitespace-nowrap">{time}</td>
                           {["mon", "tue", "wed", "thu", "fri", "sat"].map(day => (
