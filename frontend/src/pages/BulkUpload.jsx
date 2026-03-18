@@ -98,8 +98,8 @@ const BulkUpload = () => {
       { name: "Machine Design", code: "ME301", ID: "C002", credits: "3", teachers: ["T002"], faculty: "Engineering", department: "Mechanical", semester: "5" }
     ],
     rooms: [
-      { name: "Lab A", ID: "R001", capacity: 60, faculty: "Engineering" },
-      { name: "Room 101", ID: "R002", capacity: 40, faculty: "Engineering" }
+      { name: "Lab A", ID: "R001", capacity: 60, floor: "Ground", faculty: "Engineering" },
+      { name: "Room 101", ID: "R002", capacity: 40, floor: "1st", faculty: "Engineering" }
     ]
   };
 
@@ -131,6 +131,7 @@ const BulkUpload = () => {
     if (!room.name?.trim()) errors.push("Name is required");
     if (!room.ID?.trim()) errors.push("ID is required");
     if (!room.faculty?.trim()) errors.push("Faculty is required");
+    if (!room.floor?.trim()) errors.push("Floor is required");
     if (!room.capacity) errors.push("Capacity is required");
     if (room.capacity && (isNaN(room.capacity) || room.capacity <= 0)) {
       errors.push("Capacity must be a positive number");
@@ -444,6 +445,7 @@ const BulkUpload = () => {
           { name: "name", required: true, type: "string" },
           { name: "ID", required: true, type: "string" },
           { name: "capacity", required: true, type: "number" },
+          { name: "floor", required: true, type: "string" },
           { name: "faculty", required: true, type: "string" }
         ];
       default:

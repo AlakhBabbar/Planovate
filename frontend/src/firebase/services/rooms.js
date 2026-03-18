@@ -30,6 +30,7 @@ export async function upsertRoom(room) {
     ID: normalize(room.ID),
     name: normalize(room.name),
     capacity: typeof room.capacity === "number" ? room.capacity : Number(room.capacity) || 0,
+    floor: normalize(room.floor),
     faculty: normalize(room.faculty),
     availability: room.availability ?? {
       day: {

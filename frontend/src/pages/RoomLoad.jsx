@@ -53,6 +53,7 @@ const RoomLoad = () => {
     ID: "",
     name: "",
     capacity: "",
+    floor: "",
     availability: {
       day: {
         mon: { time: [] },
@@ -68,9 +69,10 @@ const RoomLoad = () => {
   const roomIdRef = useRef(null);
   const roomNameRef = useRef(null);
   const roomCapacityRef = useRef(null);
+  const roomFloorRef = useRef(null);
 
   const handleRoomModalKeyDown = (e, currentField) => {
-    const fields = [roomIdRef, roomNameRef, roomCapacityRef];
+    const fields = [roomIdRef, roomNameRef, roomCapacityRef, roomFloorRef];
     const currentIndex = fields.findIndex(ref => ref.current === e.target);
     
     if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -84,6 +86,118 @@ const RoomLoad = () => {
     }
   };
 
+  // Excel-style keyboard navigation for the rooms table
+  const handleTableKeyDown = (e, rowIndex, colIndex, totalCols) => {
+    const tableEl = e.currentTarget.closest('table');
+    if (!tableEl) return;
+
+    const getInput = (r, c) =>
+      tableEl.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+
+    let nextInput = null;
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (!e.shiftKey) {
+        // Move right, wrap to next row
+        if (colIndex < totalCols - 1) {
+          nextInput = getInput(rowIndex, colIndex + 1);
+        } else {
+          nextInput = getInput(rowIndex + 1, 0);
+        }
+      } else {
+        // Shift+Tab: move left, wrap to prev row
+        if (colIndex > 0) {
+          nextInput = getInput(rowIndex, colIndex - 1);
+        } else {
+          nextInput = getInput(rowIndex - 1, totalCols - 1);
+        }
+      }
+    } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      nextInput = getInput(rowIndex + 1, colIndex);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      nextInput = getInput(rowIndex - 1, colIndex);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      nextInput = colIndex < totalCols - 1 ? getInput(rowIndex, colIndex + 1) : getInput(rowIndex + 1, 0);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      nextInput = colIndex > 0 ? getInput(rowIndex, colIndex - 1) : getInput(rowIndex - 1, totalCols - 1);
+    } else {
+      return; // Don't prevent other keys
+    }
+
+    nextInput?.focus();
+  };
+
+  // ─── Duplicate / Conflict Validation ────────────────────────────────────────
+  const validateNewRoom = async (candidate) => {
+    const n = (s) => String(s ?? '').trim().toLowerCase();
+    const cId   = n(candidate.ID);
+    const cName = n(candidate.name);
+    const errors = [];
+    const warnings = [];
+
+    // 1. Exact duplicate within same faculty
+    const exactMatch = rooms.find((r) => n(r.ID) === cId && n(r.name) === cName);
+    if (exactMatch) {
+      errors.push(
+        `A room with ID "${candidate.ID}" and name "${candidate.name}" already exists in faculty "${selectedFaculty}".\nExact duplicates are not allowed.`
+      );
+    }
+
+    if (errors.length === 0) {
+      // 2. Same ID, different name — within same faculty
+      const idConflict = rooms.find((r) => n(r.ID) === cId && n(r.name) !== cName);
+      if (idConflict) {
+        warnings.push(
+          `⚠ Room ID "${candidate.ID}" is already used by "${idConflict.name}" in faculty "${selectedFaculty}".\n` +
+          `Are you referring to the same room? If not, please use a different ID.`
+        );
+      }
+
+      // 3. Same name, different ID — within same faculty
+      const nameConflict = rooms.find((r) => n(r.name) === cName && n(r.ID) !== cId);
+      if (nameConflict) {
+        warnings.push(
+          `⚠ A room named "${candidate.name}" already exists in faculty "${selectedFaculty}" with ID "${nameConflict.ID}".\n` +
+          `Is this the same room? If so, use the existing ID. Otherwise use a different name.`
+        );
+      }
+
+      // 4. Same floor + same name but different ID — possible misassignment
+      if (candidate.floor) {
+        const floorConflict = rooms.find(
+          (r) => n(r.name) === cName && n(r.floor) === n(candidate.floor) && n(r.ID) !== cId
+        );
+        if (floorConflict) {
+          warnings.push(
+            `⚠ A room named "${candidate.name}" already exists on Floor "${candidate.floor}" with ID "${floorConflict.ID}".\n` +
+            `Double-check this isn't the same physical room assigned a different ID.`
+          );
+        }
+      }
+
+      // 5. Cross-faculty: same ID used in another faculty (async, best-effort)
+      try {
+        const allRooms = await roomService.listRooms();
+        const crossFacultyMatch = allRooms.find(
+          (r) => n(r.ID) === cId && n(r.faculty) !== n(selectedFaculty)
+        );
+        if (crossFacultyMatch) {
+          warnings.push(
+            `ℹ Room ID "${candidate.ID}" already exists in faculty "${crossFacultyMatch.faculty}" (name: "${crossFacultyMatch.name}").\n` +
+            `This is allowed if it's a different physical room, but verify the ID is intentional.`
+          );
+        }
+      } catch (_) { /* cross-faculty check is best-effort */ }
+    }
+
+    return { errors, warnings };
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetchFaculties();
@@ -141,8 +255,8 @@ const RoomLoad = () => {
       return;
     }
 
-    if (!room.ID?.trim() || !room.name?.trim()) {
-      alert("Please fill in Room ID and Name!");
+    if (!room.ID?.trim() || !room.name?.trim() || !room.floor?.trim()) {
+      alert("Please fill in Room ID, Name, and Floor!");
       return;
     }
 
@@ -152,6 +266,7 @@ const RoomLoad = () => {
         ID: room.ID,
         name: room.name,
         capacity: room.capacity,
+        floor: room.floor,
         faculty: selectedFaculty,
         availability: room.availability,
       });
@@ -182,9 +297,9 @@ const RoomLoad = () => {
       return;
     }
 
-    const invalidRooms = modifiedRooms.filter(r => !r.ID?.trim() || !r.name?.trim());
+    const invalidRooms = modifiedRooms.filter(r => !r.ID?.trim() || !r.name?.trim() || !r.floor?.trim());
     if (invalidRooms.length > 0) {
-      alert("Please fill in all Room ID and Name fields!");
+      alert("Please fill in all Room ID, Name, and Floor fields!");
       return;
     }
 
@@ -201,6 +316,7 @@ const RoomLoad = () => {
           ID: room.ID,
           name: room.name,
           capacity: room.capacity,
+          floor: room.floor,
           faculty: selectedFaculty,
           availability: room.availability,
         });
@@ -248,6 +364,7 @@ const RoomLoad = () => {
       ID: "",
       name: "",
       capacity: "",
+      floor: "",
       availability: {
         day: {
           mon: { time: [] },
@@ -268,6 +385,7 @@ const RoomLoad = () => {
       ID: "",
       name: "",
       capacity: "",
+      floor: "",
       availability: {
         day: {
           mon: { time: [] },
@@ -287,10 +405,24 @@ const RoomLoad = () => {
       return;
     }
 
-    if (!newRoom.ID?.trim() || !newRoom.name?.trim()) {
-      alert("Please fill in Room ID and Name!");
+    if (!newRoom.ID?.trim() || !newRoom.name?.trim() || !newRoom.floor?.trim()) {
+      alert("Please fill in Room ID, Name, and Floor!");
       return;
     }
+
+    // ── Duplicate / Conflict Check ──────────────────────────────────────────
+    const { errors, warnings } = await validateNewRoom(newRoom);
+    if (errors.length > 0) {
+      alert(`❌ Cannot Save\n\n${errors.join('\n\n')}`);
+      return;
+    }
+    if (warnings.length > 0) {
+      const proceed = window.confirm(
+        `⚠ Potential Duplicate Warning\n\n${warnings.join('\n\n')}\n\nDo you still want to create this room?`
+      );
+      if (!proceed) return;
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     try {
       const unid = await roomService.upsertRoom({
@@ -298,6 +430,7 @@ const RoomLoad = () => {
         ID: newRoom.ID,
         name: newRoom.name,
         capacity: newRoom.capacity,
+        floor: newRoom.floor,
         faculty: selectedFaculty,
         availability: newRoom.availability,
       });
@@ -312,6 +445,7 @@ const RoomLoad = () => {
           ID: "",
           name: "",
           capacity: "",
+          floor: "",
           availability: {
             day: {
               mon: { time: [] },
@@ -537,6 +671,7 @@ const RoomLoad = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Room ID</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Room Name</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-32">Capacity</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-32">Floor</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Availability</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider w-32">Actions</th>
                     </tr>
@@ -545,32 +680,53 @@ const RoomLoad = () => {
                     {filteredRooms.map((room, index) => {
                       const actualIndex = rooms.findIndex(r => r.unid === room.unid || (r.ID === room.ID && r.name === room.name));
                       return (
-                        <tr key={room.unid || index} className={room.isModified ? "bg-amber-50" : ""}>
+                    <tr key={room.unid || index} className={room.isModified ? "bg-amber-50" : ""}>
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={0}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={room.ID || ""}
                               onChange={(e) => updateRoomField(actualIndex, "ID", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 0, 4)}
                               placeholder="Room ID"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={1}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={room.name || ""}
                               onChange={(e) => updateRoomField(actualIndex, "name", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 1, 4)}
                               placeholder="Room Name"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="number"
+                              data-row={index}
+                              data-col={2}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={room.capacity || ""}
                               onChange={(e) => updateRoomField(actualIndex, "capacity", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 2, 4)}
                               placeholder="Capacity"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="text"
+                              data-row={index}
+                              data-col={3}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                              value={room.floor || ""}
+                              onChange={(e) => updateRoomField(actualIndex, "floor", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 3, 4)}
+                              placeholder="Floor"
                             />
                           </td>
                           <td className="px-4 py-3 relative">
@@ -653,7 +809,7 @@ const RoomLoad = () => {
                     })}
                     {filteredRooms.length === 0 && (
                       <tr>
-                        <td colSpan="5" className="px-4 py-8 text-center text-sm text-gray-500">
+                        <td colSpan="6" className="px-4 py-8 text-center text-sm text-gray-500">
                           {searchQuery ? "No rooms match your search." : "No rooms found. Click 'Add Room' to create a new room."}
                         </td>
                       </tr>
@@ -714,6 +870,19 @@ const RoomLoad = () => {
                   onKeyDown={handleRoomModalKeyDown}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                   placeholder="Enter capacity"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">Floor *</label>
+                <input
+                  ref={roomFloorRef}
+                  type="text"
+                  value={newRoom.floor}
+                  onChange={(e) => setNewRoom({ ...newRoom, floor: e.target.value })}
+                  onKeyDown={handleRoomModalKeyDown}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                  placeholder="Enter floor (e.g. Ground, 1st, 2nd)"
                 />
               </div>
 

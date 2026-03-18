@@ -255,6 +255,7 @@ const RoomAvailability = ({ faculty, rooms: initialRooms, onRoomsUpdate }) => {
           ID: room.ID,
           name: room.name,
           capacity: room.capacity,
+          floor: room.floor,
           faculty: faculty,
           availability: room.availability,
         });
@@ -340,6 +341,12 @@ const RoomAvailability = ({ faculty, rooms: initialRooms, onRoomsUpdate }) => {
                       <span className="text-gray-300">·</span>
                       <Users className="w-2.5 h-2.5 shrink-0 text-gray-400" />
                       <span className="shrink-0">{room.capacity || "—"}</span>
+                      {room.floor && (
+                        <>
+                          <span className="text-gray-300">·</span>
+                          <span className="shrink-0">Fl: {room.floor}</span>
+                        </>
+                      )}
                     </div>
                   </button>
                 ))

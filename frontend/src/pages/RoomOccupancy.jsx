@@ -383,7 +383,7 @@ const RoomOccupancy = () => {
               <h2 className="text-xl font-bold text-blue-900">{selectedRoom.name || selectedRoom.ID}</h2>
               <div className="flex gap-4 mt-2 text-sm text-blue-700">
                 {selectedRoom.faculty && <span>Faculty: {selectedRoom.faculty}</span>}
-                {selectedRoom.type && <span>Type: {selectedRoom.type}</span>}
+                {selectedRoom.floor && <span>Floor: {selectedRoom.floor}</span>}
                 {selectedRoom.capacity && <span>Capacity: {selectedRoom.capacity}</span>}
               </div>
             </div>
@@ -467,6 +467,7 @@ const RoomOccupancy = () => {
                 <div className="font-medium text-gray-900">{room.name || room.ID}</div>
                 <div className="text-xs text-gray-500 mt-1 flex gap-3">
                   {room.faculty && <span>Faculty: {room.faculty}</span>}
+                  {room.floor && <span>Floor: {room.floor}</span>}
                   {room.capacity && <span>Cap: {room.capacity}</span>}
                 </div>
               </button>
@@ -720,8 +721,13 @@ const RoomOccupancy = () => {
                         >
                           <td className="sticky left-0 z-10 bg-white px-4 py-3 text-sm font-medium text-gray-900 border-r border-gray-200">
                             <div>{room.name || room.ID}</div>
+                            {room.floor && (
+                              <div className="text-[10px] text-gray-500 font-normal mt-0.5">
+                                Floor: {room.floor}
+                              </div>
+                            )}
                             {room.capacity && (
-                              <div className="text-[10px] text-gray-500 font-normal mt-1">
+                              <div className="text-[10px] text-gray-500 font-normal mt-0.5">
                                 Cap: {room.capacity}
                               </div>
                             )}

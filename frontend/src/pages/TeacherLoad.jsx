@@ -47,6 +47,102 @@ const TeacherLoad = () => {
     }
   };
 
+  // Excel-style keyboard navigation for the teachers table
+  const handleTableKeyDown = (e, rowIndex, colIndex, totalCols) => {
+    const tableEl = e.currentTarget.closest('table');
+    if (!tableEl) return;
+    const getInput = (r, c) =>
+      tableEl.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+    let nextInput = null;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (!e.shiftKey) {
+        nextInput = colIndex < totalCols - 1 ? getInput(rowIndex, colIndex + 1) : getInput(rowIndex + 1, 0);
+      } else {
+        nextInput = colIndex > 0 ? getInput(rowIndex, colIndex - 1) : getInput(rowIndex - 1, totalCols - 1);
+      }
+    } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      nextInput = getInput(rowIndex + 1, colIndex);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      nextInput = getInput(rowIndex - 1, colIndex);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      nextInput = colIndex < totalCols - 1 ? getInput(rowIndex, colIndex + 1) : getInput(rowIndex + 1, 0);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      nextInput = colIndex > 0 ? getInput(rowIndex, colIndex - 1) : getInput(rowIndex - 1, totalCols - 1);
+    } else {
+      return;
+    }
+    nextInput?.focus();
+  };
+
+  // ─── Duplicate / Conflict Validation ────────────────────────────────────────
+  const validateNewTeacher = async (candidate) => {
+    const n = (s) => String(s ?? '').trim().toLowerCase();
+    const cId   = n(candidate.id);
+    const cName = n(candidate.name);
+    const errors = [];
+    const warnings = [];
+
+    // 1. Exact duplicate within same faculty + department
+    const exactMatch = teachers.find((t) => n(t.id) === cId && n(t.name) === cName);
+    if (exactMatch) {
+      errors.push(
+        `Teacher "${candidate.name}" (ID: "${candidate.id}") already exists in ${selectedFaculty} › ${selectedDepartment}.\nExact duplicates are not allowed.`
+      );
+    }
+
+    if (errors.length === 0) {
+      // 2. Same ID, different name — within same faculty + dept
+      const idConflict = teachers.find((t) => n(t.id) === cId && n(t.name) !== cName);
+      if (idConflict) {
+        warnings.push(
+          `⚠ Teacher ID "${candidate.id}" is already used by "${idConflict.name}" in ${selectedFaculty} › ${selectedDepartment}.\n` +
+          `Are you referring to the same person? If not, please use a different ID.`
+        );
+      }
+
+      // 3. Same name, different ID — within same faculty + dept
+      const nameConflict = teachers.find((t) => n(t.name) === cName && n(t.id) !== cId);
+      if (nameConflict) {
+        warnings.push(
+          `⚠ A teacher named "${candidate.name}" already exists in ${selectedFaculty} › ${selectedDepartment} with ID "${nameConflict.id}".\n` +
+          `Is this the same person? If so, use the existing ID. Otherwise use a different name.`
+        );
+      }
+
+      // 4. Cross-department within same faculty: same ID exists in another dept
+      try {
+        const facultyTeachers = await teacherService.listTeachers({ faculty: selectedFaculty });
+        const crossDeptById = facultyTeachers.find(
+          (t) => n(t.ID) === cId && n(t.department) !== n(selectedDepartment)
+        );
+        if (crossDeptById) {
+          warnings.push(
+            `ℹ Teacher ID "${candidate.id}" already exists in department "${crossDeptById.department}" (name: "${crossDeptById.name}") within faculty "${selectedFaculty}".\n` +
+            `This is allowed if the same teacher covers multiple departments, but verify the ID is correct.`
+          );
+        }
+
+        // 5. Cross-department: same name exists in another dept (possible same person)
+        const crossDeptByName = facultyTeachers.find(
+          (t) => n(t.name) === cName && n(t.department) !== n(selectedDepartment) && n(t.ID) !== cId
+        );
+        if (crossDeptByName) {
+          warnings.push(
+            `ℹ A teacher named "${candidate.name}" (ID: "${crossDeptByName.ID}") already exists in department "${crossDeptByName.department}" within faculty "${selectedFaculty}".\n` +
+            `If this is the same person, consider assigning them to this department instead of creating a new entry.`
+          );
+        }
+      } catch (_) { /* cross-dept check is best-effort */ }
+    }
+
+    return { errors, warnings };
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetchFaculties(); // Load faculties on page load
@@ -273,6 +369,20 @@ const TeacherLoad = () => {
       alert("Please fill in Teacher ID and Name!");
       return;
     }
+
+    // ── Duplicate / Conflict Check ──────────────────────────────────────────
+    const { errors, warnings } = await validateNewTeacher(newTeacher);
+    if (errors.length > 0) {
+      alert(`❌ Cannot Save\n\n${errors.join('\n\n')}`);
+      return;
+    }
+    if (warnings.length > 0) {
+      const proceed = window.confirm(
+        `⚠ Potential Duplicate Warning\n\n${warnings.join('\n\n')}\n\nDo you still want to create this teacher?`
+      );
+      if (!proceed) return;
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     try {
       const unid = await teacherService.upsertTeacher({
@@ -501,18 +611,24 @@ const TeacherLoad = () => {
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={0}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={teacher.id}
                               onChange={(e) => updateTeacherField(actualIndex, "id", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 0, 2)}
                               placeholder="Teacher ID"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={1}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={teacher.name}
                               onChange={(e) => updateTeacherField(actualIndex, "name", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 1, 2)}
                               placeholder="Teacher Name"
                             />
                           </td>

@@ -58,6 +58,124 @@ const CourseLoad = () => {
     }
   };
 
+  // Excel-style keyboard navigation for the courses table
+  const handleTableKeyDown = (e, rowIndex, colIndex, totalCols) => {
+    const tableEl = e.currentTarget.closest('table');
+    if (!tableEl) return;
+    const getInput = (r, c) =>
+      tableEl.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+    let nextInput = null;
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (!e.shiftKey) {
+        nextInput = colIndex < totalCols - 1 ? getInput(rowIndex, colIndex + 1) : getInput(rowIndex + 1, 0);
+      } else {
+        nextInput = colIndex > 0 ? getInput(rowIndex, colIndex - 1) : getInput(rowIndex - 1, totalCols - 1);
+      }
+    } else if (e.key === 'Enter' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      nextInput = getInput(rowIndex + 1, colIndex);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      nextInput = getInput(rowIndex - 1, colIndex);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      nextInput = colIndex < totalCols - 1 ? getInput(rowIndex, colIndex + 1) : getInput(rowIndex + 1, 0);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      nextInput = colIndex > 0 ? getInput(rowIndex, colIndex - 1) : getInput(rowIndex - 1, totalCols - 1);
+    } else {
+      return;
+    }
+    nextInput?.focus();
+  };
+
+  // ─── Duplicate / Conflict Validation ────────────────────────────────────────
+  const validateNewCourse = async (candidate) => {
+    const n = (s) => String(s ?? '').trim().toLowerCase();
+    const cId   = n(candidate.ID);
+    const cName = n(candidate.name);
+    const cCode = n(candidate.code);
+    const errors = [];
+    const warnings = [];
+
+    const ctx = `${selectedFaculty} › ${selectedDepartment} › Sem ${selectedSemester}`;
+
+    // 1. Exact duplicate within same faculty + dept + semester
+    const exactMatch = courses.find(
+      (c) => n(c.ID) === cId && n(c.name) === cName && (cCode === '' || n(c.code) === cCode)
+    );
+    if (exactMatch) {
+      errors.push(
+        `Course "${candidate.name}" (ID: "${candidate.ID}"${candidate.code ? `, Code: "${candidate.code}"` : ''}) already exists in ${ctx}.\nExact duplicates are not allowed.`
+      );
+    }
+
+    if (errors.length === 0) {
+      // 2. Same ID, different name — within same context
+      const idConflict = courses.find((c) => n(c.ID) === cId && n(c.name) !== cName);
+      if (idConflict) {
+        warnings.push(
+          `⚠ Course ID "${candidate.ID}" is already used by "${idConflict.name}"${idConflict.code ? ` (Code: "${idConflict.code}")` : ''} in ${ctx}.\n` +
+          `Are you referring to the same course? If not, please use a different ID.`
+        );
+      }
+
+      // 3. Same code, different name/ID — within same context
+      if (cCode) {
+        const codeConflict = courses.find(
+          (c) => n(c.code) === cCode && (n(c.ID) !== cId || n(c.name) !== cName)
+        );
+        if (codeConflict) {
+          warnings.push(
+            `⚠ Course code "${candidate.code}" is already used by "${codeConflict.name}" (ID: "${codeConflict.ID}") in ${ctx}.\n` +
+            `Each course code should be unique within a semester. Consider using a different code.`
+          );
+        }
+      }
+
+      // 4. Same name, different ID/code — within same context
+      const nameConflict = courses.find(
+        (c) => n(c.name) === cName && (n(c.ID) !== cId || n(c.code) !== cCode)
+      );
+      if (nameConflict) {
+        warnings.push(
+          `⚠ A course named "${candidate.name}" already exists in ${ctx} with ID "${nameConflict.ID}"${nameConflict.code ? ` and code "${nameConflict.code}"` : ''}.\n` +
+          `Is this the same course offered again? If so, reuse the existing ID and code.`
+        );
+      }
+
+      // 5. Cross-semester: same code in another semester (same dept+faculty)
+      if (cCode) {
+        try {
+          const deptCourses = await courseService.listCourses({ faculty: selectedFaculty, department: selectedDepartment });
+          const crossSemByCode = deptCourses.find(
+            (c) => n(c.code) === cCode && n(c.semester) !== n(selectedSemester)
+          );
+          if (crossSemByCode) {
+            warnings.push(
+              `ℹ Course code "${candidate.code}" already exists in Semester "${crossSemByCode.semester}" as "${crossSemByCode.name}" (ID: "${crossSemByCode.ID}").\n` +
+              `This is common for recurring courses — just make sure the code is intentionally reused.`
+            );
+          }
+
+          // 6. Cross-semester: same course name in another semester
+          const crossSemByName = deptCourses.find(
+            (c) => n(c.name) === cName && n(c.semester) !== n(selectedSemester)
+          );
+          if (crossSemByName && !crossSemByCode) {
+            warnings.push(
+              `ℹ A course named "${candidate.name}" already exists in Semester "${crossSemByName.semester}" with ID "${crossSemByName.ID}"${crossSemByName.code ? ` and code "${crossSemByName.code}"` : ''}.\n` +
+              `If this is the same course repeated across semesters, consider using the same ID and code for consistency.`
+            );
+          }
+        } catch (_) { /* cross-semester check is best-effort */ }
+      }
+    }
+
+    return { errors, warnings };
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     fetchFaculties();
@@ -285,6 +403,21 @@ const CourseLoad = () => {
       alert("Please fill in Course ID and Name!");
       return;
     }
+
+    // ── Duplicate / Conflict Check ──────────────────────────────────────────
+    const { errors, warnings } = await validateNewCourse(newCourse);
+    if (errors.length > 0) {
+      alert(`❌ Cannot Save\n\n${errors.join('\n\n')}`);
+      return;
+    }
+    if (warnings.length > 0) {
+      const proceed = window.confirm(
+        `⚠ Potential Duplicate Warning\n\n${warnings.join('\n\n')}\n\nDo you still want to create this course?`
+      );
+      if (!proceed) return;
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
 
     try {
       const unid = await courseService.upsertCourse({
@@ -630,36 +763,48 @@ const CourseLoad = () => {
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={0}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={course.ID || ""}
                               onChange={(e) => updateCourseField(actualIndex, "ID", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 0, 4)}
                               placeholder="Course ID"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={1}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={course.name || ""}
                               onChange={(e) => updateCourseField(actualIndex, "name", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 1, 4)}
                               placeholder="Course Name"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={2}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={course.code || ""}
                               onChange={(e) => updateCourseField(actualIndex, "code", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 2, 4)}
                               placeholder="Code"
                             />
                           </td>
                           <td className="px-4 py-3">
                             <input
                               type="text"
+                              data-row={index}
+                              data-col={3}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={course.credits || ""}
                               onChange={(e) => updateCourseField(actualIndex, "credits", e.target.value)}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 3, 4)}
                               placeholder="Credits"
                             />
                           </td>
