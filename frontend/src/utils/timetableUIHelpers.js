@@ -126,7 +126,8 @@ export function updateBatchData({
       ...tableData,
       [key]: {
         ...(tableData[key] || {}),
-        [field]: value
+        [field]: value,
+        _updatedAt: Date.now(), // local edit timestamp for snapshot conflict resolution
       }
     }
   };

@@ -20,6 +20,7 @@ const TimetableTable = ({
   curriculumData,
   allCoursesRaw,
   allTeachersRaw,
+  tempCells, // Set<"rowIndex-colIndex"> — cells loaded from tempSchedules
 }) => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -65,11 +66,13 @@ const TimetableTable = ({
                   onUpdateBatch={onUpdateBatch}
                   onValidationChange={onValidationChange}
                   isFirstCell={rowIndex === 0 && colIndex === 0}
-                  firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}                  onCopyCell={onCopyCell}
+                  firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}
+                  onCopyCell={onCopyCell}
                   onMoveCell={onMoveCell}
                   curriculumData={curriculumData}
                   allCoursesRaw={allCoursesRaw}
                   allTeachersRaw={allTeachersRaw}
+                  isFromTemp={tempCells?.has(`${rowIndex}-${colIndex}`) ?? false}
                 />
               ))}
             </tr>

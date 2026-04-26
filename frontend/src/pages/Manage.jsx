@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Trash2, Calendar, Loader2, AlertCircle, Download, Database, Upload, BookOpen, Save } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { timetableService, settingsService, curriculumService, scheduleService } from "../firebase/services";
+import { timetableService, settingsService, curriculumService, scheduleService, courseService } from "../firebase/services";
 import { backupCompleteDatabase, getBackupSummary, restoreFromBackup } from "../utils/databaseBackup";
 import CurriculumFilling from "./CurriculumFilling";
 import { doc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
@@ -26,6 +26,7 @@ const Manage = () => {
   // Update fields for each timetable
   const [updateFields, setUpdateFields] = useState({});
   const [updating, setUpdating] = useState(null);
+  const [detectingHours, setDetectingHours] = useState(null); // timetableId being detected
 
   useEffect(() => {
     loadTimetables();
@@ -60,7 +61,8 @@ const Manage = () => {
       data.forEach(tt => {
         initialFields[tt.timetableId] = {
           updatedClass: tt.class || "",
-          updatedBranch: tt.branch || ""
+          updatedBranch: tt.branch || "",
+          totalLectureHours: tt.totalLectureHours ?? "",
         };
       });
       setUpdateFields(initialFields);
@@ -90,6 +92,51 @@ const Manage = () => {
     return matchingBranches.map(b => b.name);
   };
 
+  /**
+   * Auto-detect total lecture hours for a timetable by summing
+   * lectureHours of all courses in its curriculum.
+   */
+  const handleAutoDetectHours = async (timetable) => {
+    setDetectingHours(timetable.timetableId);
+    try {
+      const norm = (v) => String(v ?? "").trim().toLowerCase();
+      // Find matching curriculum
+      const curriculums = await curriculumService.listCurriculums();
+      const curriculum = curriculums.find(
+        (c) =>
+          norm(c.class) === norm(timetable.class) &&
+          norm(c.branch) === norm(timetable.branch) &&
+          norm(c.semester) === norm(timetable.semester) &&
+          norm(c.type) === norm(timetable.type)
+      );
+      if (!curriculum?.courses?.length) {
+        alert("No curriculum found for this timetable.");
+        return;
+      }
+      // Fetch all courses and sum lectureHours
+      const allCourses = await courseService.listCourses({});
+      const courseMap = new Map(allCourses.map((c) => [String(c.unid), c]));
+      let total = 0;
+      for (const entry of curriculum.courses) {
+        const cid = String(entry.courseId || entry.unid || "");
+        const courseDoc = courseMap.get(cid);
+        total += courseDoc?.lectureHours ? Number(courseDoc.lectureHours) : 0;
+      }
+      setUpdateFields((prev) => ({
+        ...prev,
+        [timetable.timetableId]: {
+          ...prev[timetable.timetableId],
+          totalLectureHours: total,
+        },
+      }));
+    } catch (err) {
+      console.error("Auto-detect hours error:", err);
+      alert("Failed to auto-detect hours.");
+    } finally {
+      setDetectingHours(null);
+    }
+  };
+
   const handleUpdateTimetable = async (timetable) => {
     const fields = updateFields[timetable.timetableId];
     
@@ -111,7 +158,8 @@ const Manage = () => {
       const timetableRef = doc(db, "timetables", timetable.timetableId);
       await updateDoc(timetableRef, {
         class: fields.updatedClass,
-        branch: fields.updatedBranch
+        branch: fields.updatedBranch,
+        totalLectureHours: Number(fields.totalLectureHours) || 0,
       });
 
       // Update all schedules for this timetable
@@ -576,6 +624,9 @@ const Manage = () => {
                     <th className="px-4 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Updated Branch
                     </th>
+                    <th className="px-4 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Total Lec Hrs/Week
+                    </th>
                     <th className="px-4 py-4 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">
                       Actions
                     </th>
@@ -630,6 +681,26 @@ const Manage = () => {
                             <option key={branch} value={branch}>{branch}</option>
                           ))}
                         </select>
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            step="1"
+                            value={fields.totalLectureHours ?? ""}
+                            onChange={(e) => handleUpdateFieldChange(timetable.timetableId, "totalLectureHours", e.target.value)}
+                            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="hrs"
+                          />
+                          <button
+                            onClick={() => handleAutoDetectHours(timetable)}
+                            disabled={detectingHours === timetable.timetableId}
+                            className="px-2 py-1 text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors disabled:opacity-50 whitespace-nowrap"
+                            title="Auto-detect from curriculum course hours"
+                          >
+                            {detectingHours === timetable.timetableId ? "..." : "Auto"}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">

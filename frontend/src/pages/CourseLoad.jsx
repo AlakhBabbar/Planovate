@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { BookOpen, Plus, Trash2, Save, Search, Users } from "lucide-react";
+import { BookOpen, Plus, Trash2, Save, Search, Users, Zap } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { courseService, teacherService } from "../firebase/services";
@@ -35,6 +35,8 @@ const CourseLoad = () => {
     name: "",
     code: "",
     credits: "",
+    lectureHours: "",
+    type: "Theory",
     teachers: []
   });
 
@@ -42,9 +44,20 @@ const CourseLoad = () => {
   const courseNameRef = useRef(null);
   const courseCodeRef = useRef(null);
   const courseCreditsRef = useRef(null);
+  const courseLectureHoursRef = useRef(null);
+
+  // Auto-detect type and lectureHours from credits
+  const autoDetectFromCredits = (credits) => {
+    const c = parseFloat(credits);
+    if (!c || isNaN(c)) return {};
+    return {
+      lectureHours: c,
+      type: c >= 3 ? "Theory" : "Lab",
+    };
+  };
 
   const handleCourseModalKeyDown = (e, currentField) => {
-    const fields = [courseIdRef, courseNameRef, courseCodeRef, courseCreditsRef];
+    const fields = [courseIdRef, courseNameRef, courseCodeRef, courseCreditsRef, courseLectureHoursRef];
     const currentIndex = fields.findIndex(ref => ref.current === e.target);
     
     if (e.key === 'ArrowDown' || e.key === 'Enter') {
@@ -275,6 +288,8 @@ const CourseLoad = () => {
         name: course.name,
         code: course.code,
         credits: course.credits,
+        lectureHours: course.lectureHours,
+        type: course.type,
         teachers: course.teachers || [],
         faculty: selectedFaculty,
         semester: selectedSemester,
@@ -327,6 +342,8 @@ const CourseLoad = () => {
           name: course.name,
           code: course.code,
           credits: course.credits,
+          lectureHours: course.lectureHours,
+          type: course.type,
           teachers: course.teachers || [],
           faculty: selectedFaculty,
           semester: selectedSemester,
@@ -377,6 +394,8 @@ const CourseLoad = () => {
       name: "",
       code: "",
       credits: "",
+      lectureHours: "",
+      type: "Theory",
       teachers: []
     });
     setIsAddCourseModalOpen(true);
@@ -389,6 +408,8 @@ const CourseLoad = () => {
       name: "",
       code: "",
       credits: "",
+      lectureHours: "",
+      type: "Theory",
       teachers: []
     });
   };
@@ -426,6 +447,8 @@ const CourseLoad = () => {
         name: newCourse.name,
         code: newCourse.code,
         credits: newCourse.credits,
+        lectureHours: newCourse.lectureHours,
+        type: newCourse.type,
         teachers: newCourse.teachers || [],
         faculty: selectedFaculty,
         semester: selectedSemester,
@@ -443,6 +466,8 @@ const CourseLoad = () => {
           name: "",
           code: "",
           credits: "",
+          lectureHours: "",
+          type: "Theory",
           teachers: []
         });
       } else {
@@ -459,6 +484,36 @@ const CourseLoad = () => {
     updatedCourses[index][field] = value;
     updatedCourses[index].isModified = true;
     setCourses(updatedCourses);
+  };
+
+  /**
+   * Bulk auto-detect: applies lectureHours + type to every course
+   * in the current table based on their existing credits value.
+   * Marks all updated courses as modified so "Update All" will save them.
+   */
+  const handleAutoDetectAll = () => {
+    if (courses.length === 0) return;
+    const updated = courses.map((course) => {
+      const detected = autoDetectFromCredits(course.credits);
+      if (!detected.lectureHours) return course; // no credits → skip
+      return {
+        ...course,
+        lectureHours: detected.lectureHours,
+        type: detected.type,
+        isModified: true,
+      };
+    });
+    setCourses(updated);
+    setFilteredCourses(
+      searchQuery.trim()
+        ? updated.filter(
+            (c) =>
+              c.ID?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              c.code?.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+        : updated
+    );
   };
 
   const handleAddFaculty = async () => {
@@ -729,6 +784,15 @@ const CourseLoad = () => {
                   Add Course
                 </button>
                 <button
+                  onClick={handleAutoDetectAll}
+                  disabled={courses.length === 0}
+                  title="Auto-fill Lecture Hours and Type for all courses based on their credits"
+                  className="px-4 py-2 text-sm bg-blue-50 border border-blue-200 text-blue-700 rounded hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Zap className="w-4 h-4" />
+                  Auto-Detect All
+                </button>
+                <button
                   onClick={handleUpdateAll}
                   disabled={saving || courses.filter(c => c.isModified || !c.unid).length === 0}
                   className="px-4 py-2 text-sm bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
@@ -751,6 +815,8 @@ const CourseLoad = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Course Name</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Code</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-20">Credits</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-24">Lec Hrs</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider w-28">Type</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Teachers</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider w-32">Actions</th>
                     </tr>
@@ -798,15 +864,51 @@ const CourseLoad = () => {
                           </td>
                           <td className="px-4 py-3">
                             <input
-                              type="text"
+                              type="number"
+                              step="0.5"
                               data-row={index}
                               data-col={3}
                               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                               value={course.credits || ""}
-                              onChange={(e) => updateCourseField(actualIndex, "credits", e.target.value)}
-                              onKeyDown={(e) => handleTableKeyDown(e, index, 3, 4)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const detected = autoDetectFromCredits(val);
+                                updateCourseField(actualIndex, "credits", val);
+                                if (detected.lectureHours !== undefined) {
+                                  updateCourseField(actualIndex, "lectureHours", detected.lectureHours);
+                                  updateCourseField(actualIndex, "type", detected.type);
+                                }
+                              }}
+                              onKeyDown={(e) => handleTableKeyDown(e, index, 3, 6)}
                               placeholder="Credits"
                             />
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                step="0.5"
+                                data-row={index}
+                                data-col={4}
+                                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                                value={course.lectureHours ?? ""}
+                                onChange={(e) => updateCourseField(actualIndex, "lectureHours", e.target.value)}
+                                onKeyDown={(e) => handleTableKeyDown(e, index, 4, 6)}
+                                placeholder="Hrs"
+                              />
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <select
+                              data-row={index}
+                              data-col={5}
+                              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                              value={course.type || "Theory"}
+                              onChange={(e) => updateCourseField(actualIndex, "type", e.target.value)}
+                            >
+                              <option value="Theory">Theory</option>
+                              <option value="Lab">Lab</option>
+                            </select>
                           </td>
                           <td className="px-4 py-3 relative">
                             <button
@@ -902,7 +1004,7 @@ const CourseLoad = () => {
                     })}
                     {filteredCourses.length === 0 && (
                       <tr>
-                        <td colSpan="6" className="px-4 py-8 text-center text-sm text-gray-500">
+                        <td colSpan="8" className="px-4 py-8 text-center text-sm text-gray-500">
                           {searchQuery ? "No courses match your search." : "No courses found. Click 'Add Row' to create a new course."}
                         </td>
                       </tr>
@@ -970,13 +1072,55 @@ const CourseLoad = () => {
                 <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide mb-2">Credits</label>
                 <input
                   ref={courseCreditsRef}
-                  type="text"
+                  type="number"
+                  step="0.5"
                   value={newCourse.credits}
-                  onChange={(e) => setNewCourse({ ...newCourse, credits: e.target.value })}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const detected = autoDetectFromCredits(val);
+                    setNewCourse(prev => ({ ...prev, credits: val, ...detected }));
+                  }}
                   onKeyDown={handleCourseModalKeyDown}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
                   placeholder="Enter credits"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide">Lecture Hours/Week</label>
+                    {newCourse.credits && (
+                      <span className="text-xs text-blue-600">auto-detected</span>
+                    )}
+                  </div>
+                  <input
+                    ref={courseLectureHoursRef}
+                    type="number"
+                    step="0.5"
+                    value={newCourse.lectureHours}
+                    onChange={(e) => setNewCourse(prev => ({ ...prev, lectureHours: e.target.value }))}
+                    onKeyDown={handleCourseModalKeyDown}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                    placeholder="Hours per week"
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-medium text-gray-700 uppercase tracking-wide">Type</label>
+                    {newCourse.credits && (
+                      <span className="text-xs text-blue-600">auto-detected</span>
+                    )}
+                  </div>
+                  <select
+                    value={newCourse.type}
+                    onChange={(e) => setNewCourse(prev => ({ ...prev, type: e.target.value }))}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400"
+                  >
+                    <option value="Theory">Theory</option>
+                    <option value="Lab">Lab</option>
+                  </select>
+                </div>
               </div>
             </div>
             

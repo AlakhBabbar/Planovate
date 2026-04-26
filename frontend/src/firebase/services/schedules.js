@@ -10,6 +10,7 @@ import {
   deleteField,
   doc,
   getDocs,
+  onSnapshot,
   query,
   serverTimestamp,
   setDoc,
@@ -30,7 +31,7 @@ export async function getSchedulesByTimetableId(timetableId) {
   const snap = await getDocs(
     query(schedulesCol, where("timetableId", "==", String(timetableId)))
   );
-  return snap.docs.map((d) => d.data());
+  return snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
 }
 
 /**
@@ -164,4 +165,31 @@ export async function deleteScheduleById(scheduleId) {
 export async function getAllSchedules() {
   const snap = await getDocs(schedulesCol);
   return snap.docs.map((d) => d.data());
+}
+
+/**
+ * Live listener for schedules of ONE timetable.
+ * Returns an unsubscribe function.
+ *
+ * @param {string}   timetableId
+ * @param {Function} onData   - called with array of schedule docs on every change
+ * @param {Function} onError
+ * @returns {() => void} unsubscribe
+ */
+export function watchSchedulesByTimetableId(timetableId, onData, onError) {
+  if (!timetableId) return () => {};
+  const q = query(
+    schedulesCol,
+    where("timetableId", "==", String(timetableId))
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      onData(snap.docs.map((d) => ({ _docId: d.id, ...d.data() })));
+    },
+    (err) => {
+      console.error("[schedules] snapshot error:", err);
+      if (onError) onError(err);
+    }
+  );
 }

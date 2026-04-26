@@ -378,6 +378,7 @@ const TimetableCell = ({
   curriculumData,
   allCoursesRaw,
   allTeachersRaw,
+  isFromTemp = false, // cell was loaded from tempSchedules → show yellow highlight
 }) => {
   const key = `${rowIndex}-${colIndex}`;
   const batchCount = batches[key] || 1;
@@ -865,12 +866,14 @@ const TimetableCell = ({
 
   return (
     <td 
-      className={`p-2 min-w-[140px] align-top relative group cursor-move transition-all border-r border-gray-200 ${
+      className={`p-2 min-w-[140px] align-top relative group cursor-move transition-all border-r ${
         dragOver
-          ? 'bg-gray-100 ring-2 ring-gray-400'
+          ? 'ring-2 ring-gray-400 bg-gray-100 border-gray-300'
+          : isFromTemp
+          ? 'bg-yellow-50 border-amber-300 ring-1 ring-amber-200'
           : isFilled
-          ? 'bg-white'
-          : 'bg-gray-50 opacity-50 hover:opacity-100'
+          ? 'bg-white border-gray-200'
+          : 'bg-gray-50 opacity-50 hover:opacity-100 border-gray-200'
       }`}
       draggable="true"
       onDragStart={handleDragStart}

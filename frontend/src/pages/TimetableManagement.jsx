@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2, Lock } from "lucide-react";
+import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2, Lock, Loader2 } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import TimetableTable from "../components/timetableManagment/TimetableTable";
@@ -19,9 +19,11 @@ import {
   generateNextTimeSlot,
   DEFAULT_TIME_SLOTS,
 } from "../utils/timetableUIHelpers";
-import { courseService, roomService, teacherService, timetableService, settingsService, curriculumService } from "../firebase/services";
+import { courseService, roomService, teacherService, timetableService, settingsService, curriculumService, scheduleService, tempScheduleService } from "../firebase/services";
 import { resolveBatchDataForDisplay, convertDisplayToIds } from "../utils/idDisplayHelpers";
 import { validateAllBatchData, hasValidationErrors, getValidationSummary } from "../utils/validationHelpers";
+import { buildScheduleOccurrences, generateTimetableId } from "../utils/timetableHelpers";
+import { normalize, safeId } from "../utils/dataHelpers";
 
 // Generate unique table ID for internal use
 const generateUniqueTableId = () => `table_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -56,10 +58,35 @@ const Timetable = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [showExportModal, setShowExportModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  
+
   // Track loaded metadata per tab to prevent refetching on tab switch
   const loadedMetadataRef = useRef({});
-  
+
+  // Auto-save status: "saved" | "saving" | "unsaved"
+  const [autoSaveStatus, setAutoSaveStatus] = useState("saved");
+
+  // ── Recent changes: only the cells the user edited since the last auto-save ──
+  // Keys are "tabKey:rowIndex-colIndex-batchIndex", values are the cell data objects.
+  // We use BOTH a ref (for the interval closure) and state (for React to see updates).
+  const recentChangesRef = useRef({});
+  const [recentChanges, setRecentChanges] = useState({});
+  const syncRecentChanges = (updater) => {
+    const next = typeof updater === "function" ? updater(recentChangesRef.current) : updater;
+    recentChangesRef.current = next;
+    setRecentChanges(next);
+  };
+
+  // ── Cells that came from tempSchedules on load (for yellow highlight) ──
+  // Keys are "rowIndex-colIndex" (cell position, not batch level).
+  const [tempCells, setTempCells] = useState(new Set());
+
+  // ── Unsaved-changes banner ─────────────────────────────────────────────────
+  const [hasUnsavedFromTemp, setHasUnsavedFromTemp] = useState(false);
+
+  // Keep tabMetadata accessible inside async closures without stale-ref issues
+  const tabMetadataRef = useRef(tabMetadata);
+  useEffect(() => { tabMetadataRef.current = tabMetadata; }, [tabMetadata]);
+
   // Refs for keyboard navigation
   const semesterInputRef = useRef(null);
   const typeInputRef = useRef(null);
@@ -85,6 +112,74 @@ const Timetable = () => {
   useEffect(() => {
     fetchTimetables();
   }, [fetchTimetables]);
+
+  // ─── Helper: load + merge permanent schedules with temp schedules ────────────
+  // Returns { resolvedBatchData, resolvedBatches, newTempCells, hasTempData }
+  const loadAndMergeSchedules = async (timetableId) => {
+    const { reconstructTimetableFromSchedules } = await import("../utils/timetableHelpers");
+
+    const [permDocs, tempDocs] = await Promise.all([
+      scheduleService.getSchedulesByTimetableId(timetableId),
+      tempScheduleService.getTempSchedulesByTimetableId(timetableId),
+    ]);
+
+    // Build a map from docKey → { perm, temp } for merging
+    // docKey pattern: "rowIndex-colIndex-batchIndex"
+    const permMap = new Map();
+    permDocs.forEach((d) => {
+      const k = `${d.rowIndex}-${d.colIndex}-${d.batchIndex ?? 0}`;
+      permMap.set(k, d);
+    });
+
+    const tempMap = new Map();
+    tempDocs.forEach((d) => {
+      const k = `${d.rowIndex}-${d.colIndex}-${d.batchIndex ?? 0}`;
+      tempMap.set(k, d);
+    });
+
+    // Merge: for each key present in either collection take the newer entry
+    const allKeys = new Set([...permMap.keys(), ...tempMap.keys()]);
+    const merged = [];
+    const newTempCells = new Set(); // "rowIndex-colIndex" cell positions from temp
+
+    for (const k of allKeys) {
+      const perm = permMap.get(k);
+      const temp = tempMap.get(k);
+
+      if (perm && temp) {
+        const permTs = perm.updatedAt?.toMillis?.() ?? 0;
+        const tempTs = temp.updatedAt?.toMillis?.() ?? 0;
+        if (tempTs > permTs) {
+          merged.push(temp);
+          newTempCells.add(`${temp.rowIndex}-${temp.colIndex}`);
+        } else {
+          merged.push(perm);
+        }
+      } else if (temp) {
+        merged.push(temp);
+        newTempCells.add(`${temp.rowIndex}-${temp.colIndex}`);
+      } else if (perm) {
+        merged.push(perm);
+      }
+    }
+
+    if (merged.length === 0) {
+      return { resolvedBatchData: {}, resolvedBatches: {}, newTempCells, hasTempData: newTempCells.size > 0 };
+    }
+
+    const { batchesByTable, batchDataByTable } = reconstructTimetableFromSchedules(merged);
+    const tableName = Object.keys(batchesByTable)[0] || "Table 1";
+    const rawBatchData = batchDataByTable[tableName] || {};
+    const resolvedBatchData = await resolveBatchDataForDisplay(rawBatchData);
+    const resolvedBatches = batchesByTable[tableName] || {};
+
+    return {
+      resolvedBatchData,
+      resolvedBatches,
+      newTempCells,
+      hasTempData: newTempCells.size > 0,
+    };
+  };
 
   // Fetch programs and branches from settings
   useEffect(() => {
@@ -192,30 +287,27 @@ const Timetable = () => {
       if (cancelled) return;
 
       if (existingTimetable) {
+        const ttId = existingTimetable.timetableId;
+
+        // Fetch permanent + temp schedules and merge them
+        const { resolvedBatchData, resolvedBatches, newTempCells, hasTempData } =
+          await loadAndMergeSchedules(ttId);
+
+        if (cancelled) return;
+
         // Load data into the ACTIVE tab only
         setTimeSlots(existingTimetable.timeSlots || DEFAULT_TIME_SLOTS);
-        
-        const firstLoadedTable = existingTimetable.tables[0] || "Table 1";
-        const loadedBatchData = existingTimetable.batchDataByTable[firstLoadedTable] || {};
-        
-        // Resolve IDs to display names
-        const resolvedBatchData = await resolveBatchDataForDisplay(loadedBatchData);
-        
-        setBatches(prev => ({
-          ...prev,
-          [activeTable]: existingTimetable.batchesByTable[firstLoadedTable] || {}
-        }));
-        setBatchData(prev => ({
-          ...prev,
-          [activeTable]: resolvedBatchData
-        }));
-        
+        setBatches(prev => ({ ...prev, [activeTable]: resolvedBatches }));
+        setBatchData(prev => ({ ...prev, [activeTable]: resolvedBatchData }));
+        setTempCells(newTempCells);
+        setHasUnsavedFromTemp(hasTempData);
+
         // Update timetableId in metadata
         setTabMetadata(prev => ({
           ...prev,
-          [activeTable]: { ...prev[activeTable], timetableId: existingTimetable.timetableId }
+          [activeTable]: { ...prev[activeTable], timetableId: ttId }
         }));
-        
+
         // Mark this metadata as loaded
         loadedMetadataRef.current[metaKey] = true;
       }
@@ -231,59 +323,145 @@ const Timetable = () => {
     };
   }, [tabMetadata[activeTable]?.className, tabMetadata[activeTable]?.branch, tabMetadata[activeTable]?.semester, tabMetadata[activeTable]?.type]);
 
+  // ─── Auto-save: every 5s, save ONLY recentChanges to tempSchedules ──────────
+  useEffect(() => {
+    const timetableId = tabMetadata[activeTable]?.timetableId;
+    const meta        = tabMetadata[activeTable] || {};
+    const metaComplete = !!(meta.className && meta.branch && meta.semester && meta.type);
+    if (!timetableId || !metaComplete) return;
+
+    const interval = setInterval(async () => {
+      // Read from ref — no re-render cost, always current
+      const changes = recentChangesRef.current;
+      if (Object.keys(changes).length === 0) return; // nothing to save
+
+      try {
+        setAutoSaveStatus("saving");
+        const currentMeta = tabMetadataRef.current[activeTable] || {};
+        const tableName   = generateTableName(activeTable, tables);
+
+        // Build minimal occurrences list — only the changed cells
+        const convertedChanges = await convertDisplayToIds(changes);
+        const occurrences = [];
+        const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+        for (const [cellKey, cellData] of Object.entries(convertedChanges)) {
+          // cellKey format: "rowIndex-colIndex-batchIndex"
+          const [rowIndex, colIndex, batchIndex] = cellKey.split("-").map(Number);
+          occurrences.push({
+            timetableId,
+            tableId: tableName,
+            rowIndex,
+            colIndex,
+            batchIndex: batchIndex ?? 0,
+            day: days[colIndex] ?? "",
+            time: timeSlots[rowIndex] ?? "",
+            class: currentMeta.className,
+            branch: currentMeta.branch,
+            semester: currentMeta.semester,
+            type: currentMeta.type,
+            batch: cellData.batchName || "",
+            courseId: cellData.courseId || "",
+            teacherId: cellData.teacherId || "",
+            roomId: cellData.roomId || "",
+          });
+        }
+
+        if (occurrences.length > 0) {
+          await tempScheduleService.upsertTempSchedules(timetableId, occurrences);
+        }
+
+        // Clear only the keys we just saved
+        syncRecentChanges((prev) => {
+          const next = { ...prev };
+          Object.keys(changes).forEach((k) => delete next[k]);
+          return next;
+        });
+
+        setAutoSaveStatus("saved");
+      } catch (err) {
+        console.error("[auto-save] error:", err);
+        setAutoSaveStatus("unsaved");
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabMetadata[activeTable]?.timetableId, activeTable, timeSlots]);
+
+  // ─── Ctrl+S keyboard shortcut ───────────────────────────────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        saveToFirestore();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTable, tabMetadata, batches, batchData, timeSlots]);
+
   const handleLoadSelectedTimetable = async (timetable) => {
     try {
       // Check if this timetable is already open in another tab
       const existingTab = findTabWithMetadata(timetable.class, timetable.branch, timetable.semester, timetable.type);
       if (existingTab) {
-        // Clear input fields in current tab before switching
         setTabMetadata(prev => ({
           ...prev,
           [activeTable]: { className: "", branch: "", semester: "", type: "", timetableId: "" }
         }));
-        // Switch to the existing tab and close modal
         setActiveTable(existingTab);
         setShowBrowseModal(false);
         return;
       }
 
       const loadedTimetable = await timetableService.loadTimetable(timetable.timetableId);
-      
-      if (loadedTimetable) {
-        // Update metadata for current tab
-        setTabMetadata(prev => ({
-          ...prev,
-          [activeTable]: {
-            className: timetable.class || "",
-            branch: timetable.branch || "",
-            semester: timetable.semester || "",
-            type: timetable.type || "",
-            timetableId: timetable.timetableId
-          }
-        }));
-        
-        // Load data into the ACTIVE tab only
-        setTimeSlots(loadedTimetable.timeSlots);
-        
-        const firstLoadedTable = loadedTimetable.tables[0] || "Table 1";
-        const loadedBatchData = loadedTimetable.batchDataByTable[firstLoadedTable] || {};
-        
-        // Resolve IDs to display names
-        const resolvedBatchData = await resolveBatchDataForDisplay(loadedBatchData);
-        
-        setBatches(prev => ({
-          ...prev,
-          [activeTable]: loadedTimetable.batchesByTable[firstLoadedTable] || {}
-        }));
-        setBatchData(prev => ({
-          ...prev,
-          [activeTable]: resolvedBatchData
-        }));
-        
-        setShowBrowseModal(false);
-      }
+      if (!loadedTimetable) return;
+
+      // Update metadata first
+      setTabMetadata(prev => ({
+        ...prev,
+        [activeTable]: {
+          className: timetable.class || "",
+          branch: timetable.branch || "",
+          semester: timetable.semester || "",
+          type: timetable.type || "",
+          timetableId: timetable.timetableId
+        }
+      }));
+
+      setTimeSlots(loadedTimetable.timeSlots);
+
+      // Fetch permanent + temp schedules and merge
+      const { resolvedBatchData, resolvedBatches, newTempCells, hasTempData } =
+        await loadAndMergeSchedules(timetable.timetableId);
+
+      setBatches(prev => ({ ...prev, [activeTable]: resolvedBatches }));
+      setBatchData(prev => ({ ...prev, [activeTable]: resolvedBatchData }));
+      setTempCells(newTempCells);
+      setHasUnsavedFromTemp(hasTempData);
+      setShowBrowseModal(false);
     } catch (error) {
       console.error("Error loading timetable:", error);
+    }
+  };
+
+  // Discard unsaved temp-schedule changes
+  const handleDiscardTemp = async () => {
+    const timetableId = tabMetadata[activeTable]?.timetableId;
+    if (!timetableId) return;
+    try {
+      await tempScheduleService.deleteTempSchedulesByTimetableId(timetableId);
+      // Reload from permanent schedules only
+      const { resolvedBatchData, resolvedBatches } = await loadAndMergeSchedules(timetableId);
+      setBatches(prev => ({ ...prev, [activeTable]: resolvedBatches }));
+      setBatchData(prev => ({ ...prev, [activeTable]: resolvedBatchData }));
+      setTempCells(new Set());
+      setHasUnsavedFromTemp(false);
+      syncRecentChanges({});
+    } catch (err) {
+      console.error("[discard] error:", err);
     }
   };
 
@@ -299,12 +477,19 @@ const Timetable = () => {
     // Shift batch data: move entries after batchIndex down by 1
     setBatchData((prev) => {
       const tableData = { ...(prev[activeTable] || {}) };
-      // Shift batches above batchIndex down
+      const now = Date.now();
+      const changes = {};
+      // Shift batches above batchIndex down, stamping _updatedAt on each moved cell
       for (let i = batchIndex; i < currentCount - 1; i++) {
-        tableData[`${rowIndex}-${colIndex}-${i}`] = tableData[`${rowIndex}-${colIndex}-${i + 1}`] || {};
+        const src = tableData[`${rowIndex}-${colIndex}-${i + 1}`] || {};
+        const cell = { ...src, _updatedAt: now };
+        tableData[`${rowIndex}-${colIndex}-${i}`] = cell;
+        changes[`${rowIndex}-${colIndex}-${i}`] = cell;
       }
       // Remove the last (now duplicated) entry
       delete tableData[`${rowIndex}-${colIndex}-${currentCount - 1}`];
+      // Track as recent changes
+      syncRecentChanges((prev) => ({ ...prev, ...changes }));
       return { ...prev, [activeTable]: tableData };
     });
 
@@ -319,6 +504,7 @@ const Timetable = () => {
   };
 
   const updateBatch = (rowIndex, colIndex, batchIndex, field, value) => {
+    const cellKey = `${rowIndex}-${colIndex}-${batchIndex}`;
     setBatchData((prev) => {
       const { updatedBatchData, conflictResult } = updateBatchData({
         currentBatchData: prev,
@@ -332,14 +518,17 @@ const Timetable = () => {
         tables,
         checkConflictsFn: checkConflicts,
       });
-      
+
       if (conflictResult) {
-        const key = `${rowIndex}-${colIndex}-${batchIndex}`;
-        setConflicts((prevConflicts) => 
-          updateConflictsState(prevConflicts, activeTable, key, field, conflictResult)
+        setConflicts((prevConflicts) =>
+          updateConflictsState(prevConflicts, activeTable, cellKey, field, conflictResult)
         );
       }
-      
+
+      // Track this cell as a recent change for auto-save
+      const updatedCell = (updatedBatchData[activeTable] || {})[cellKey] || {};
+      syncRecentChanges((prev) => ({ ...prev, [cellKey]: updatedCell }));
+
       return updatedBatchData;
     });
   };
@@ -360,23 +549,26 @@ const Timetable = () => {
       }
     }));
     
-    // Copy all batch data
+    // Copy all batch data, stamping _updatedAt on each target cell
+    const now = Date.now();
     setBatchData(prev => {
       const newBatchData = { ...prev };
-      if (!newBatchData[activeTable]) {
-        newBatchData[activeTable] = {};
-      }
-      
+      if (!newBatchData[activeTable]) newBatchData[activeTable] = {};
+      const changes = {};
+
       for (let i = 0; i < sourceBatchCount; i++) {
         const sourceDataKey = `${sourceRow}-${sourceCol}-${i}`;
         const targetDataKey = `${targetRow}-${targetCol}-${i}`;
         const sourceData = sourceBatchData[sourceDataKey];
-        
         if (sourceData) {
-          newBatchData[activeTable][targetDataKey] = { ...sourceData };
+          const cell = { ...sourceData, _updatedAt: now };
+          newBatchData[activeTable][targetDataKey] = cell;
+          changes[targetDataKey] = cell;
         }
       }
-      
+
+      // Track copied cells as recent changes
+      syncRecentChanges((prev) => ({ ...prev, ...changes }));
       return newBatchData;
     });
   };
@@ -601,10 +793,17 @@ const Timetable = () => {
         batchDataByTable,
       });
 
+      // After permanent save, clear temp entries and local unsaved state
+      await tempScheduleService.deleteTempSchedulesByTimetableId(id).catch(() => {});
+      syncRecentChanges({});
+      setTempCells(new Set());
+      setHasUnsavedFromTemp(false);
+
       setTabMetadata(prev => ({
         ...prev,
         [activeTable]: { ...prev[activeTable], timetableId: id }
       }));
+      setAutoSaveStatus("saved");
       alert(`✅ Timetable saved successfully! (ID: ${id})`);
     } catch (error) {
       console.error("Error saving timetable:", error);
@@ -765,11 +964,30 @@ const Timetable = () => {
           </div>
 
           {/* Action Buttons - Save & Export */}
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Auto-save status indicator */}
+            {tabMetadata[activeTable]?.timetableId && (
+              <span className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-all ${
+                autoSaveStatus === "saving"
+                  ? "text-yellow-700 bg-yellow-50 border border-yellow-200"
+                  : autoSaveStatus === "unsaved"
+                  ? "text-red-700 bg-red-50 border border-red-200"
+                  : "text-green-700 bg-green-50 border border-green-200"
+              }`}>
+                {autoSaveStatus === "saving" ? (
+                  <><Loader2 size={12} className="animate-spin" /> Auto-backing up...</>
+                ) : autoSaveStatus === "unsaved" ? (
+                  <><AlertCircle size={12} /> Not backed up</>
+                ) : (
+                  <><CheckCircle size={12} /> Auto-backed up</>
+                )}
+              </span>
+            )}
             <button
               className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium flex items-center gap-2"
               onClick={saveToFirestore}
               type="button"
+              title="Save (Ctrl+S)"
             >
               <Save size={16} />
               Save
@@ -784,6 +1002,30 @@ const Timetable = () => {
             </button>
           </div>
         </div>
+
+        {/* Unsaved temp-schedule changes banner */}
+        {hasUnsavedFromTemp && (
+          <div className="mb-3 flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+            <div className="flex items-center gap-2 text-amber-800 text-xs font-medium">
+              <AlertCircle size={14} className="text-amber-500 flex-shrink-0" />
+              You have unsaved changes from a previous session
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={saveToFirestore}
+                className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors font-medium"
+              >
+                Save Now
+              </button>
+              <button
+                onClick={handleDiscardTemp}
+                className="px-3 py-1 text-xs bg-white border border-amber-300 text-amber-700 rounded hover:bg-amber-50 transition-colors font-medium"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Timetable Information Form */}
         <TimetableInfoForm
@@ -836,6 +1078,7 @@ const Timetable = () => {
             curriculumData={activeCurriculum}
             allCoursesRaw={allCoursesRaw}
             allTeachersRaw={allTeachersRaw}
+            tempCells={tempCells}
           />
           {!isMetadataComplete && (
             <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg z-10 pointer-events-all">

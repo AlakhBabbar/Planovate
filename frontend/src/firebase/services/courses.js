@@ -36,6 +36,8 @@ export async function upsertCourse(course) {
     name: normalize(course.name),
     code: normalize(course.code),
     credits: normalize(course.credits),
+    lectureHours: course.lectureHours !== undefined ? Number(course.lectureHours) || 0 : 0,
+    type: normalize(course.type) || "Theory",
     teachers: Array.isArray(course.teachers) ? course.teachers : [],
     faculty: normalize(course.faculty),
     department: normalize(course.department),

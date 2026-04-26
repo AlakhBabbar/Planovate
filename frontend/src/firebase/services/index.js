@@ -5,3 +5,4 @@ export * as timetableService from "./timetables";
 export * as scheduleService from "./schedules";
 export * as curriculumService from "./curriculums";
 export * as settingsService from "./settings";
+export * as tempScheduleService from "./tempSchedules";
