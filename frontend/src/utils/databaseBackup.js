@@ -10,7 +10,8 @@ import {
   roomService, 
   timetableService,
   scheduleService 
-} from "../firebase/services";
+} from "../api";
+import { apiFetch } from "../api/apiClient";
 
 /**
  * Fields to exclude from backup (auto-generated fields)
@@ -51,10 +52,11 @@ function downloadJSON(data, filename) {
 /**
  * Fetches all data from a collection and cleans it
  */
-async function fetchCollection(name, fetchFn) {
+async function fetchCollection(name) {
   try {
     console.log(`Fetching ${name}...`);
-    const data = await fetchFn();
+    const path = name.toLowerCase();
+    const data = await apiFetch(`/${path}`);
     const cleaned = data.map(item => cleanData(item));
     return { success: true, data: cleaned, count: cleaned.length };
   } catch (error) {
@@ -75,21 +77,30 @@ export async function backupCompleteDatabase() {
   };
 
   try {
-    // Fetch all collections
+    // Fetch all collections directly from Firestore
     const collections = [
-      { name: 'teachers', fetchFn: () => teacherService.listTeachers() },
-      { name: 'courses', fetchFn: () => courseService.listCourses() },
-      { name: 'rooms', fetchFn: () => roomService.listRooms() },
-      { name: 'timetables', fetchFn: () => timetableService.listTimetables() },
+      'teachers',
+      'courses',
+      'rooms',
+      'timetables',
+      'schedules',
+      'tempSchedules',
+      'curriculums',
+      'settings'
     ];
 
+    let totalCollections = 0;
+    let totalDocuments = 0;
+
     // Fetch each collection
-    for (const { name, fetchFn } of collections) {
-      const result = await fetchCollection(name, fetchFn);
+    for (const name of collections) {
+      const result = await fetchCollection(name);
       
       if (result.success) {
         results.collections[name] = result.data;
         results.summary[name] = { count: result.count, status: 'success' };
+        totalCollections++;
+        totalDocuments += result.count;
         
         // Download individual JSON file for each collection
         downloadJSON(result.data, `${name}_${timestamp}.json`);
@@ -98,29 +109,6 @@ export async function backupCompleteDatabase() {
       }
       
       // Small delay between downloads
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-
-    // Fetch schedules for each timetable
-    if (results.collections.timetables && results.collections.timetables.length > 0) {
-      console.log('Fetching schedules for all timetables...');
-      const allSchedules = [];
-      
-      for (const timetable of results.collections.timetables) {
-        try {
-          const schedules = await scheduleService.getSchedulesByTimetableId(timetable.timetableId);
-          const cleanedSchedules = schedules.map(item => cleanData(item));
-          allSchedules.push(...cleanedSchedules);
-        } catch (error) {
-          console.error(`Error fetching schedules for timetable ${timetable.timetableId}:`, error);
-        }
-      }
-      
-      results.collections.schedules = allSchedules;
-      results.summary.schedules = { count: allSchedules.length, status: 'success' };
-      downloadJSON(allSchedules, `schedules_${timestamp}.json`);
-      
-      // Small delay
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
@@ -147,19 +135,24 @@ export async function backupCompleteDatabase() {
  */
 export async function getBackupSummary() {
   try {
-    const [teachers, courses, rooms, timetables] = await Promise.all([
-      teacherService.listTeachers(),
-      courseService.listCourses(),
-      roomService.listRooms(),
-      timetableService.listTimetables(),
-    ]);
+    const collections = [
+      'teachers', 'courses', 'rooms', 'timetables', 
+      'schedules', 'tempSchedules', 'curriculums', 'settings'
+    ];
+    
+    const summary = {};
+    let total = 0;
+
+    for (const name of collections) {
+      const path = name.toLowerCase();
+      const data = await apiFetch(`/${path}`);
+      summary[name] = data.length;
+      total += data.length;
+    }
 
     return {
-      teachers: teachers.length,
-      courses: courses.length,
-      rooms: rooms.length,
-      timetables: timetables.length,
-      total: teachers.length + courses.length + rooms.length + timetables.length
+      ...summary,
+      total
     };
   } catch (error) {
     console.error('Error getting backup summary:', error);

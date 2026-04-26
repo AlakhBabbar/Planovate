@@ -21,7 +21,10 @@ import {
 } from "../services/curriculumService.js";
 import { computeSuggestionGrid } from "../engine/computeEngine.js";
 import { getNeighborSuggestions } from "../engine/suggestionBuilder.js";
-import { normalize } from "../models/Schedule.js";
+const normalize = (value) =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
 
 /**
  * Per-client state object.

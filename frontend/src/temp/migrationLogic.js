@@ -18,7 +18,7 @@ import {
   writeBatch,
   doc
 } from "firebase/firestore";
-import { db } from "../firebase/firebaseConfig";
+
 
 /**
  * Fetches all collections data

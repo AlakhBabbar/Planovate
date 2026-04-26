@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, X, Trash2, Save, Settings, BookOpen, GitBranch, Loader2 } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { settingsService } from "../firebase/services";
+import { settingsService } from "../api";
 
 const AdminSettings = () => {
   const [programs, setPrograms] = useState([]);

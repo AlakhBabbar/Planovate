@@ -1,17 +1,13 @@
-/**
- * Room document shape.
- *
- * Firestore collection: "rooms"
- * Doc ID: numeric unid
- *
- * @typedef {Object} Room
- * @property {number} unid
- * @property {string} ID          - display code e.g. "R101"
- * @property {string} name
- * @property {number} capacity
- * @property {string} floor
- * @property {string} faculty
- * @property {Object} availability - { day: { mon: { time: [] }, ... } }
- */
+import mongoose from 'mongoose';
 
-export default {};
+const roomSchema = new mongoose.Schema({
+  unid: { type: mongoose.Schema.Types.Mixed, required: true, unique: true },
+  name: { type: String, required: true },
+  ID: { type: String },
+  capacity: { type: Number },
+  floor: { type: String },
+  faculty: { type: String },
+  availability: { type: mongoose.Schema.Types.Mixed }
+}, { timestamps: true });
+
+export default mongoose.model('Room', roomSchema);

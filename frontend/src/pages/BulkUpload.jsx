@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import { Upload, Download, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { courseService, roomService, teacherService } from "../firebase/services";
+import { courseService, roomService, teacherService } from "../api";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../firebase/firebaseConfig";
+
 
 const BulkUpload = () => {
   const [activeTab, setActiveTab] = useState("teachers");

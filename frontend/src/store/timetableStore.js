@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { courseService, roomService, teacherService, timetableService } from '../firebase/services';
+import { courseService, roomService, teacherService, timetableService } from "../api";
 
 /**
  * Zustand Store for Timetable Global State

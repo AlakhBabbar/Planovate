@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Users, Plus, Trash2, Save, CheckCircle, Search } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { teacherService } from "../firebase/services";
+import { teacherService } from "../api";
 
 const TeacherLoad = () => {
   const [faculties, setFaculties] = useState([]);
@@ -159,7 +159,7 @@ const TeacherLoad = () => {
 
   const fetchDepartments = async (faculty) => {
     try {
-      const data = await teacherService.listDepartments(faculty);
+      const data = await teacherService.listDepartments({ faculty });
       setDepartments(data);
       setSelectedDepartment("");
       setTeachers([]);

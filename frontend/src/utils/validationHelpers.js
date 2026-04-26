@@ -3,7 +3,7 @@
  * Ensures courses, teachers, and rooms entered are valid and exist in database
  */
 
-import { courseService, teacherService, roomService } from "../firebase/services";
+import { courseService, teacherService, roomService } from "../api";
 
 // Cache for validation data
 const validationCache = {

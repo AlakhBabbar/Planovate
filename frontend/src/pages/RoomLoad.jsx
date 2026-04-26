@@ -3,7 +3,7 @@ import { Building2, Plus, Trash2, Save, Search, Clock, Calendar } from "lucide-r
 import { useSearchParams } from "react-router-dom";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { roomService } from "../firebase/services";
+import { roomService } from "../api";
 import RoomAvailability from "./RoomAvailability";
 import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
 
@@ -473,11 +473,17 @@ const RoomLoad = () => {
     setRooms(updatedRooms);
   };
 
+  const getDaySlots = (room, dayKey) => {
+    const dayData = room?.availability?.day?.[dayKey];
+    if (!dayData) return [];
+    return Array.isArray(dayData) ? dayData : (dayData.time || []);
+  };
+
   const toggleAvailability = (index, day, time) => {
     const updatedRooms = [...rooms];
     
-    if (!updatedRooms[index].availability.day[day]) {
-      updatedRooms[index].availability.day[day] = { time: [] };
+    if (!updatedRooms[index].availability.day[day] || Array.isArray(updatedRooms[index].availability.day[day])) {
+      updatedRooms[index].availability.day[day] = { time: getDaySlots(updatedRooms[index], day) };
     }
     
     const dayAvailability = updatedRooms[index].availability.day[day].time;
@@ -764,7 +770,7 @@ const RoomLoad = () => {
                                               <td key={day} className="border border-gray-300 p-1 text-center">
                                                 <input
                                                   type="checkbox"
-                                                  checked={room.availability.day[day]?.time.some(slot => slot.time === time)}
+                                                  checked={getDaySlots(room, day).some(slot => slot.time === time)}
                                                   onChange={() => toggleAvailability(actualIndex, day, time)}
                                                   className="rounded border-gray-300"
                                                 />

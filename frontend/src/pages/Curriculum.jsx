@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { Plus, X, List, Grid, Save, Trash2, Search, BookOpen, Users } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { courseService, teacherService, curriculumService } from "../firebase/services";
+import { courseService, teacherService, curriculumService } from "../api";
 import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
-import { db } from "../firebase/firebaseConfig";
+
 
 const Curriculum = () => {
   const [viewMode, setViewMode] = useState("cards");
@@ -119,7 +119,7 @@ const Curriculum = () => {
         updatedAt: new Date().toISOString()
       };
 
-      await setDoc(doc(db, "curriculum", curriculumId), curriculumData);
+      await apiFetch(`/curriculums/${curriculumId}`, { method: 'PUT', body: JSON.stringify(curriculumData) });
       
       setIsCreating(false);
       setNewCurriculum({

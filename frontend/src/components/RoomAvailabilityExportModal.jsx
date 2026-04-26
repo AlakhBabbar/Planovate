@@ -8,7 +8,7 @@ import {
   DAYS,
   isAvailable,
 } from "../utils/roomAvailabilityExport";
-import { roomService } from "../firebase/services";
+import { roomService } from "../api";
 
 const sortByFaculty = (rooms) =>
   [...rooms].sort((a, b) => {

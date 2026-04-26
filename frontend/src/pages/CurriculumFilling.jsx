@@ -4,7 +4,7 @@ import {
   timetableService,
   scheduleService,
   curriculumService,
-} from "../firebase/services";
+} from "../api";
 import CurriculumModal from "../components/timetableManagment/CurriculumModal";
 
 /**

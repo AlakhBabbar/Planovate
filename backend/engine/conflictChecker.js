@@ -5,7 +5,10 @@
  * to quickly determine what's occupied at any (day, time) slot.
  */
 
-import { normalize } from "../models/Schedule.js";
+const normalize = (value) =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
 
 /**
  * Build occupation maps from a list of schedule documents.

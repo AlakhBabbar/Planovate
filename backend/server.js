@@ -13,14 +13,40 @@ import { WebSocketServer } from "ws";
 import apiRoutes from "./routes/api.js";
 import { handleConnection } from "./ws/socketHandler.js";
 
-// Initialize Firebase (side-effect: connects to Firestore)
+// MongoDB connection
+import { connectDB } from "./db/db.js";
+connectDB();
+
+// MongoDB Routes
+import courseRoutes from "./routes/courseRoutes.js";
+import teacherRoutes from "./routes/teacherRoutes.js";
+import roomRoutes from "./routes/roomRoutes.js";
+import curriculumRoutes from "./routes/curriculumRoutes.js";
+import timetableRoutes from "./routes/timetableRoutes.js";
+import scheduleRoutes from "./routes/scheduleRoutes.js";
+import tempScheduleRoutes from "./routes/tempscheduleRoutes.js";
+import settingRoutes from "./routes/settingRoutes.js";
+
+// Initialize Firebase (side-effect: connects to Firestore - keeping for fallback)
 import "./config/firebase.js";
 
 // ── Express ──────────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use("/api", apiRoutes);
+
+// Legacy Firebase API routes (used by compute engine initially)
+app.use("/api/firebase", apiRoutes);
+
+// MongoDB REST API Routes
+app.use("/api/courses", courseRoutes);
+app.use("/api/teachers", teacherRoutes);
+app.use("/api/rooms", roomRoutes);
+app.use("/api/curriculums", curriculumRoutes);
+app.use("/api/timetables", timetableRoutes);
+app.use("/api/schedules", scheduleRoutes);
+app.use("/api/tempschedules", tempScheduleRoutes);
+app.use("/api/settings", settingRoutes);
 
 // ── HTTP + WebSocket ─────────────────────────────────────────────────────────
 const server = createServer(app);

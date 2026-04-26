@@ -3,8 +3,8 @@ import { Loader2, AlertCircle, Building2, Download, ChevronDown, Search, Filter,
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import RoomOccupancyPreviewModal from "../components/RoomOccupancyPreviewModal";
-import { roomService, timetableService } from "../firebase/services";
-import { getAllSchedules } from "../firebase/services/schedules";
+import { roomService, timetableService } from "../api";
+import { getAllSchedules } from "../api/schedules";
 import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
 import { getCourseDisplayName, getTeacherDisplayName } from "../utils/idDisplayHelpers";
 import { exportRoomOccupancyToPdf, exportRoomOccupancyToExcel, exportRoomOccupancyToPdfMobile, exportRoomOccupancyToExcelMobile } from "../utils/roomOccupancyExport";

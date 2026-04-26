@@ -19,7 +19,7 @@ import {
   generateNextTimeSlot,
   DEFAULT_TIME_SLOTS,
 } from "../utils/timetableUIHelpers";
-import { courseService, roomService, teacherService, timetableService, settingsService, curriculumService, scheduleService, tempScheduleService } from "../firebase/services";
+import { courseService, roomService, teacherService, timetableService, settingsService, curriculumService, scheduleService, tempScheduleService } from "../api";
 import { resolveBatchDataForDisplay, convertDisplayToIds } from "../utils/idDisplayHelpers";
 import { validateAllBatchData, hasValidationErrors, getValidationSummary } from "../utils/validationHelpers";
 import { buildScheduleOccurrences, generateTimetableId } from "../utils/timetableHelpers";

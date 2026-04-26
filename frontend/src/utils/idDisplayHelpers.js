@@ -3,7 +3,7 @@
  * Used for displaying timetable data after migration
  */
 
-import { courseService, teacherService, roomService } from "../firebase/services";
+import { courseService, teacherService, roomService } from "../api";
 
 // Cache to avoid repeated fetches
 const cache = {
@@ -17,6 +17,12 @@ const cache = {
   }
 };
 
+const fetchPromises = {
+  teachers: null,
+  courses: null,
+  rooms: null
+};
+
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 /**
@@ -28,13 +34,22 @@ export async function fetchTeachersCache() {
     return cache.teachers;
   }
   
-  const teachers = await teacherService.listTeachers({});
-  cache.teachers.clear();
-  teachers.forEach(t => {
-    cache.teachers.set(String(t.unid), t);
-  });
-  cache.lastFetch.teachers = now;
-  
+  if (fetchPromises.teachers) {
+    await fetchPromises.teachers;
+    return cache.teachers;
+  }
+
+  fetchPromises.teachers = (async () => {
+    const teachers = await teacherService.listTeachers({});
+    cache.teachers.clear();
+    teachers.forEach(t => {
+      cache.teachers.set(String(t.unid), t);
+    });
+    cache.lastFetch.teachers = Date.now();
+  })();
+
+  await fetchPromises.teachers;
+  fetchPromises.teachers = null;
   return cache.teachers;
 }
 
@@ -47,13 +62,22 @@ export async function fetchCoursesCache() {
     return cache.courses;
   }
   
-  const courses = await courseService.listCourses({});
-  cache.courses.clear();
-  courses.forEach(c => {
-    cache.courses.set(String(c.unid), c);
-  });
-  cache.lastFetch.courses = now;
-  
+  if (fetchPromises.courses) {
+    await fetchPromises.courses;
+    return cache.courses;
+  }
+
+  fetchPromises.courses = (async () => {
+    const courses = await courseService.listCourses({});
+    cache.courses.clear();
+    courses.forEach(c => {
+      cache.courses.set(String(c.unid), c);
+    });
+    cache.lastFetch.courses = Date.now();
+  })();
+
+  await fetchPromises.courses;
+  fetchPromises.courses = null;
   return cache.courses;
 }
 
@@ -66,13 +90,22 @@ export async function fetchRoomsCache() {
     return cache.rooms;
   }
   
-  const rooms = await roomService.listRooms({});
-  cache.rooms.clear();
-  rooms.forEach(r => {
-    cache.rooms.set(String(r.unid), r);
-  });
-  cache.lastFetch.rooms = now;
-  
+  if (fetchPromises.rooms) {
+    await fetchPromises.rooms;
+    return cache.rooms;
+  }
+
+  fetchPromises.rooms = (async () => {
+    const rooms = await roomService.listRooms({});
+    cache.rooms.clear();
+    rooms.forEach(r => {
+      cache.rooms.set(String(r.unid), r);
+    });
+    cache.lastFetch.rooms = Date.now();
+  })();
+
+  await fetchPromises.rooms;
+  fetchPromises.rooms = null;
   return cache.rooms;
 }
 

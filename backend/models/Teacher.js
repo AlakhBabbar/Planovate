@@ -1,15 +1,11 @@
-/**
- * Teacher document shape.
- *
- * Firestore collection: "teachers"
- * Doc ID: numeric unid
- *
- * @typedef {Object} Teacher
- * @property {number} unid
- * @property {string} ID          - display code e.g. "T42"
- * @property {string} name
- * @property {string} faculty
- * @property {string} department
- */
+import mongoose from 'mongoose';
 
-export default {};
+const teacherSchema = new mongoose.Schema({
+  unid: { type: Number, required: true, unique: true },
+  name: { type: String, required: true },
+  ID: { type: String },
+  department: { type: String },
+  faculty: { type: String }
+}, { timestamps: true });
+
+export default mongoose.model('Teacher', teacherSchema);

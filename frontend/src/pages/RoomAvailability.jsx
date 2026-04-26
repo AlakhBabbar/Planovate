@@ -11,7 +11,7 @@ import {
   Users,
   Building2,
 } from "lucide-react";
-import { roomService, scheduleService, timetableService } from "../firebase/services";
+import { roomService, scheduleService, timetableService } from "../api";
 import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
 import RoomAvailabilityExportModal from "../components/RoomAvailabilityExportModal";
 
@@ -21,13 +21,25 @@ const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat"];
 const TIMESLOTS = DEFAULT_TIME_SLOTS;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
-const isSlotAvailable = (room, dayKey, time) =>
-  room?.availability?.day?.[dayKey]?.time?.some((s) => s.time === time) ?? false;
+const getDaySlots = (room, dayKey) => {
+  const dayData = room?.availability?.day?.[dayKey];
+  if (!dayData) return [];
+  return Array.isArray(dayData) ? dayData : (dayData.time || []);
+};
+
+const isSlotAvailable = (room, dayKey, time) => {
+  const slots = getDaySlots(room, dayKey);
+  return slots.some((s) => s.time === time);
+};
 
 const setSlotAvailability = (room, dayKey, time, available) => {
   const updated = JSON.parse(JSON.stringify(room)); // deep clone
   if (!updated.availability?.day) updated.availability = { day: {} };
-  if (!updated.availability.day[dayKey]) updated.availability.day[dayKey] = { time: [] };
+  
+  // ensure we use the { time: [] } format going forward
+  if (!updated.availability.day[dayKey] || Array.isArray(updated.availability.day[dayKey])) {
+    updated.availability.day[dayKey] = { time: getDaySlots(room, dayKey) };
+  }
 
   const slots = updated.availability.day[dayKey].time;
   const idx = slots.findIndex((s) => s.time === time);

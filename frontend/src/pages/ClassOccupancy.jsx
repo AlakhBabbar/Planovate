@@ -3,8 +3,8 @@ import { Loader2, AlertCircle, GraduationCap, Download, ChevronDown, Search, Fil
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import ClassOccupancyPreviewModal from "../components/ClassOccupancyPreviewModal";
-import { timetableService } from "../firebase/services";
-import { getAllSchedules } from "../firebase/services/schedules";
+import { timetableService } from "../api";
+import { getAllSchedules } from "../api/schedules";
 import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
 import { getCourseDisplayName, getRoomDisplayName, getTeacherDisplayName } from "../utils/idDisplayHelpers";
 import { exportClassOccupancyToPdf, exportClassOccupancyToExcel, exportClassOccupancyToPdfMobile, exportClassOccupancyToExcelMobile } from "../utils/classOccupancyExport";

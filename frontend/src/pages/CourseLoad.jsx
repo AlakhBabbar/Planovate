@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { BookOpen, Plus, Trash2, Save, Search, Users, Zap } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { courseService, teacherService } from "../firebase/services";
+import { courseService, teacherService } from "../api";
 
 const CourseLoad = () => {
   const [faculties, setFaculties] = useState([]);
@@ -205,7 +205,7 @@ const CourseLoad = () => {
 
   const fetchDepartments = async (faculty) => {
     try {
-      const data = await teacherService.listDepartments(faculty);
+      const data = await teacherService.listDepartments({ faculty });
       setDepartments(data);
       setSelectedDepartment("");
       setSemesters([]);

@@ -1,19 +1,17 @@
-/**
- * Course document shape.
- *
- * Firestore collection: "courses"
- * Doc ID: numeric unid
- *
- * @typedef {Object} Course
- * @property {number} unid
- * @property {string} ID          - display code e.g. "CS301"
- * @property {string} name
- * @property {string} code
- * @property {string} credits
- * @property {string[]} teachers  - array of teacher IDs that can teach this course
- * @property {string} faculty
- * @property {string} department
- * @property {string} semester
- */
+import mongoose from 'mongoose';
 
-export default {};
+const courseSchema = new mongoose.Schema({
+  unid: { type: Number, required: true, unique: true },
+  name: { type: String, required: true },
+  code: { type: String },
+  credits: { type: String },
+  ID: { type: String },
+  department: { type: String },
+  faculty: { type: String },
+  semester: { type: String },
+  lectureHours: { type: Number },
+  type: { type: String },
+  teachers: [{ type: mongoose.Schema.Types.Mixed }]
+}, { timestamps: true });
+
+export default mongoose.model('Course', courseSchema);

@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from "react";
 import { Trash2, Calendar, Loader2, AlertCircle, Download, Database, Upload, BookOpen, Save } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { timetableService, settingsService, curriculumService, scheduleService, courseService } from "../firebase/services";
+import { timetableService, settingsService, curriculumService, scheduleService, courseService } from "../api";
 import { backupCompleteDatabase, getBackupSummary, restoreFromBackup } from "../utils/databaseBackup";
 import CurriculumFilling from "./CurriculumFilling";
 import { doc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "../firebase/firebaseConfig";
+
 
 const Manage = () => {
   const [activeTab, setActiveTab] = useState("timetables");
@@ -391,10 +391,14 @@ const Manage = () => {
       const result = await backupCompleteDatabase();
       
       if (result.success) {
-        const summary = Object.entries(result.summary)
-          .map(([name, data]) => `${name}: ${data.count} records`)
+        const collectionNames = Object.keys(result.summary);
+        const totalDocs = collectionNames.reduce((acc, name) => acc + (result.summary[name]?.count || 0), 0);
+        
+        const details = collectionNames
+          .map((name) => ` • ${name}: ${result.summary[name].count} records`)
           .join('\n');
-        alert(`Database backup completed successfully!\n\n${summary}\n\nFiles have been downloaded to your Downloads folder.`);
+          
+        alert(`✅ Database Backup Completed!\n\nSuccessfully downloaded ${collectionNames.length} collections containing ${totalDocs} total documents.\n\nContents:\n${details}\n\nFiles have been saved to your Downloads folder.`);
       } else {
         alert(`Backup failed: ${result.error}`);
       }
@@ -537,7 +541,10 @@ const Manage = () => {
             <div className="mt-4 flex items-center gap-2 text-sm text-gray-600 bg-blue-50 px-4 py-2 rounded-lg border border-blue-100">
               <Database className="w-4 h-4 text-blue-600" />
               <span>
-                Database contains: {backupSummary.teachers} teachers, {backupSummary.courses} courses, {backupSummary.rooms} rooms, {backupSummary.timetables} timetables
+                <strong>Database Summary:</strong> {Object.keys(backupSummary).length - 1} collections ({backupSummary.total} total documents).
+                <span className="ml-2 text-xs opacity-80 block mt-1">
+                  Teachers: {backupSummary.teachers || 0} | Courses: {backupSummary.courses || 0} | Rooms: {backupSummary.rooms || 0} | Timetables: {backupSummary.timetables || 0} | Schedules: {backupSummary.schedules || 0} | Temp: {backupSummary.tempSchedules || 0} | Curriculums: {backupSummary.curriculums || 0} | Settings: {backupSummary.settings || 0}
+                </span>
               </span>
             </div>
           )}

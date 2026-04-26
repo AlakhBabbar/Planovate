@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Save, Loader2 } from "lucide-react";
-import { courseService, teacherService } from "../../firebase/services";
+import { courseService, teacherService } from "../../api";
 
 /**
  * Modal for editing curriculum details for a specific class

@@ -1,22 +1,15 @@
-/**
- * Curriculum document shape.
- *
- * Firestore collection: "curriculums"
- * Doc ID: {class}_{branch}_{sem}_{type}
- *
- * @typedef {Object} CurriculumCourse
- * @property {string} courseId
- * @property {string[]} teacherIds
- *
- * @typedef {Object} Curriculum
- * @property {string} curriculumId
- * @property {string} class
- * @property {string} branch
- * @property {string} semester
- * @property {string} type
- * @property {CurriculumCourse[]} courses
- * @property {number} totalCredits
- * @property {number} expectedCredits
- */
+import mongoose from 'mongoose';
 
-export default {};
+const curriculumSchema = new mongoose.Schema({
+  curriculumId: { type: String, required: true, unique: true },
+  branch: { type: String },
+  class: { type: String },
+  semester: { type: String },
+  type: { type: String },
+  courses: [{
+    courseId: { type: String },
+    teacherIds: [{ type: String }]
+  }]
+}, { timestamps: true });
+
+export default mongoose.model('Curriculum', curriculumSchema);

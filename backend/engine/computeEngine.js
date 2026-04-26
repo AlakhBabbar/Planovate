@@ -14,7 +14,10 @@
  * - Suggest batch splitting for lab/practical courses when appropriate
  */
 
-import { normalize } from "../models/Schedule.js";
+const normalize = (value) =>
+  String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
 import { buildOccupationMaps, isTeacherFree, isRoomFree } from "./conflictChecker.js";
 
 const MAX_SUGGESTIONS = 3;
