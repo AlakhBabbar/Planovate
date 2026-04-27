@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2, Lock, Loader2, Wifi, WifiOff, Sparkles } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
@@ -6,6 +7,7 @@ import TimetableTable from "../components/timetableManagment/TimetableTable";
 import BrowseTimetablesModal from "../components/timetableManagment/BrowseTimetablesModal";
 import TimetableInfoForm from "../components/timetableManagment/TimetableInfoForm";
 import ExportModal from "../components/timetableManagment/ExportModal";
+import ConflictPanel from "../components/timetableManagment/ConflictPanel";
 
 import useTimetableStore from "../store/timetableStore";
 import { exportTimetableToPdf, exportTimetablesToDoc, exportTimetablesToExcel, exportTimetablesToPdf } from "../utils";
@@ -28,6 +30,10 @@ import { useWebSocket } from "../hooks/useWebSocket";
 const generateUniqueTableId = () => `table_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
 const Timetable = () => {
+  // Routing — supports /timetable/:timetableId for deep linking
+  const { timetableId: urlTimetableId } = useParams();
+  const navigate = useNavigate();
+
   // Zustand store for global options
   const { courseOptions, teacherOptions, roomOptions, semesterOptions, fetchOptions, fetchTimetables, allCoursesRaw, allTeachersRaw } = useTimetableStore();
   
@@ -56,6 +62,12 @@ const Timetable = () => {
   const [validationErrors, setValidationErrors] = useState({});
   const [showExportModal, setShowExportModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Conflict panel — focused cell tracking
+  const [focusedCell, setFocusedCell] = useState(null); // { row, col }
+  // Highlight state — set when navigating to a conflict
+  const [highlightCell, setHighlightCell] = useState(null); // { row, col }
+  const highlightTimerRef = useRef(null);
 
   // Track loaded metadata per tab to prevent refetching on tab switch
   const loadedMetadataRef = useRef({});
@@ -616,9 +628,91 @@ const Timetable = () => {
       return updatedBatchData;
     });
   };
-  
+
+  // ── Conflict panel: cell focus tracking ───────────────────────────────────
+  const handleCellFocusForPanel = useCallback((row, col) => {
+    setFocusedCell({ row, col });
+    wsCellFocus(row, col);
+  }, [wsCellFocus]);
+
+  // ── Navigate to a conflicting cell in another timetable ───────────────────
+  const navigateToConflict = useCallback(async (conflict) => {
+    const targetId = conflict.timetableId;
+
+    // Check if target timetable is already open in any tab
+    const existingTab = tables.find(t => {
+      const meta = tabMetadataRef.current[t];
+      return meta?.timetableId === targetId;
+    });
+
+    if (existingTab) {
+      // Just switch to it
+      setActiveTable(existingTab);
+      navigate(`/timetable/${targetId}`, { replace: true });
+    } else {
+      // Load in active tab (or open new tab logic could go here)
+      try {
+        const loadedTimetable = await timetableService.loadTimetable(targetId);
+        if (!loadedTimetable) return;
+
+        setTabMetadata(prev => ({
+          ...prev,
+          [activeTable]: {
+            className: conflict.displayClass || '',
+            branch:    conflict.displayBranch || '',
+            semester:  conflict.displaySemester || '',
+            type:      conflict.displayType || '',
+            timetableId: targetId,
+          }
+        }));
+        navigate(`/timetable/${targetId}`, { replace: true });
+      } catch (e) {
+        console.error('[navigate] failed to load timetable:', e);
+        return;
+      }
+    }
+
+    // Highlight the conflicting cell after a short delay (let tab switch settle)
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    setTimeout(() => {
+      setHighlightCell({ row: conflict.rowIndex, col: conflict.colIndex });
+      // Scroll cell into view
+      const cellEl = document.querySelector(
+        `[data-cell="${conflict.rowIndex}-${conflict.colIndex}"]`
+      );
+      if (cellEl) cellEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+
+      // Auto-clear highlight after 3s
+      highlightTimerRef.current = setTimeout(() => setHighlightCell(null), 3000);
+    }, 150);
+  }, [tables, activeTable, navigate, tabMetadataRef]);
+
+  // ── URL param auto-load on mount ──────────────────────────────────────────
+  useEffect(() => {
+    if (!urlTimetableId) return;
+    // Only auto-load if no timetable is loaded yet in the active tab
+    const currentMeta = tabMetadataRef.current[activeTable];
+    if (currentMeta?.timetableId) return;
+
+    timetableService.loadTimetable(urlTimetableId).then(tt => {
+      if (!tt) return;
+      setTabMetadata(prev => ({
+        ...prev,
+        [activeTable]: {
+          className:   tt.timetable?.class    || '',
+          branch:      tt.timetable?.branch   || '',
+          semester:    tt.timetable?.semester || '',
+          type:        tt.timetable?.type     || '',
+          timetableId: urlTimetableId,
+        }
+      }));
+    }).catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTimetableId]);
+
   // Copy cell data from source to target
   const handleCopyCell = (sourceRow, sourceCol, targetRow, targetCol) => {
+
     const sourceBatchData = batchData[activeTable] || {};
     const sourceBatches = batches[activeTable] || {};
     const sourceKey = `${sourceRow}-${sourceCol}`;
@@ -725,19 +819,6 @@ const Timetable = () => {
     });
   };
 
-  // Derive conflict stats directly from backend wsConflicts Map
-  const stats = (() => {
-    let teacherConflicts = 0;
-    let roomConflicts = 0;
-    for (const list of wsConflicts.values()) {
-      for (const c of list) {
-        if (c.type === 'teacher') teacherConflicts++;
-        else if (c.type === 'room') roomConflicts++;
-      }
-    }
-    return { teacherConflicts, roomConflicts };
-  })();
-  
   // Calculate validation stats
   const activeValidationErrors = validationErrors[activeTable] || {};
   const validationErrorCount = Object.keys(activeValidationErrors).length;
@@ -1213,8 +1294,9 @@ const Timetable = () => {
             tempCells={tempCells}
             wsSuggestions={wsSuggestions}
             wsCellSuggestions={wsCellSuggestions}
-            onCellFocus={wsCellFocus}
+            onCellFocus={handleCellFocusForPanel}
             onCellBlur={wsCellBlur}
+            highlightCell={highlightCell}
           />
           {/* WS not-ready overlay — locks grid until backend connection is established */}
           {isMetadataComplete && !wsReady && (
@@ -1259,47 +1341,24 @@ const Timetable = () => {
 
         </div>
 
-        {/* Suggestions Sidebar */}
+        {/* Conflict & Status Sidebar */}
         <div className="w-80 flex-shrink-0">
-          <div className="sticky top-6 space-y-4">
-            {/* Stats Card */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Status</h3>
-              <div className="space-y-2">
-                <div className={`p-2 rounded text-xs flex items-center gap-2 ${
-                  stats.teacherConflicts > 0 
-                    ? "bg-red-50 text-red-800" 
-                    : "bg-green-50 text-green-800"
-                }`}>
-                  {stats.teacherConflicts > 0 ? <AlertCircle size={14} /> : <CheckCircle size={14} />}
-                  <span className="font-medium">Teachers: {stats.teacherConflicts > 0 ? `${stats.teacherConflicts} Conflicts` : 'Clear'}</span>
-                </div>
-                <div className={`p-2 rounded text-xs flex items-center gap-2 ${
-                  stats.roomConflicts > 0 
-                    ? "bg-red-50 text-red-800" 
-                    : "bg-green-50 text-green-800"
-                }`}>
-                  {stats.roomConflicts > 0 ? <AlertCircle size={14} /> : <CheckCircle size={14} />}
-                  <span className="font-medium">Rooms: {stats.roomConflicts > 0 ? `${stats.roomConflicts} Conflicts` : 'Clear'}</span>
-                </div>
-                <div className={`p-2 rounded text-xs flex items-center gap-2 ${
-                  validationErrorCount > 0 
-                    ? "bg-orange-50 text-orange-800" 
-                    : "bg-green-50 text-green-800"
-                }`}>
-                  {validationErrorCount > 0 ? <AlertCircle size={14} /> : <CheckCircle size={14} />}
-                  <span className="font-medium">Validation: {validationErrorCount > 0 ? `${validationErrorCount} Errors` : 'Valid'}</span>
-                </div>
+          <div className="sticky top-6 space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto pr-1">
+            {/* Validation status pill */}
+            {validationErrorCount > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-800">
+                <AlertCircle size={13} />
+                <span className="font-semibold">{validationErrorCount} Validation Error{validationErrorCount > 1 ? 's' : ''}</span>
               </div>
-            </div>
+            )}
 
-            {/* Suggestions Card */}
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Suggestions</h3>
-              <div className="space-y-3 text-xs text-gray-600">
-                <p>Suggestions will appear here based on your timetable context.</p>
-              </div>
-            </div>
+            {/* Interactive Conflict Panel */}
+            <ConflictPanel
+              wsConflicts={wsConflicts}
+              focusedCell={focusedCell}
+              onNavigate={navigateToConflict}
+              activeMetadata={activeMetadata}
+            />
           </div>
         </div>
       </div>

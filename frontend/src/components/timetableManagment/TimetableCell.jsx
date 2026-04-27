@@ -383,6 +383,8 @@ const TimetableCell = ({
   isSuggestionFocused = false, // user dwelled 2.5s → show full suggestions
   onCellFocus,         // (row, col) => void
   onCellBlur,          // () => void
+  isHighlighted = false, // flash highlight on conflict navigation
+  dataCellKey,           // e.g. "2-3" for data-cell attribute
 }) => {
   const key = `${rowIndex}-${colIndex}`;
   const batchCount = batches[key] || 1;
@@ -869,9 +871,12 @@ const TimetableCell = ({
   };
 
   return (
-    <td 
+    <td
+      data-cell={dataCellKey || `${rowIndex}-${colIndex}`}
       className={`p-2 min-w-[140px] align-top relative group cursor-move transition-all border-r ${
-        dragOver
+        isHighlighted
+          ? 'ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300 animate-pulse'
+          : dragOver
           ? 'ring-2 ring-gray-400 bg-gray-100 border-gray-300'
           : isFromTemp
           ? 'bg-yellow-50 border-amber-300 ring-1 ring-amber-200'

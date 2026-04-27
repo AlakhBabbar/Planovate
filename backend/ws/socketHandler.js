@@ -257,7 +257,7 @@ async function handleCheckCell(ws, state, payload) {
   }
 
   try {
-    const conflicts = await checkCellConflicts({
+    const rawConflicts = await checkCellConflicts({
       timetableId: state.timetableId,
       day,
       time,
@@ -267,12 +267,47 @@ async function handleCheckCell(ws, state, payload) {
       teacherId:  teacherId || null,
       roomId:     roomId    || null,
     });
-    send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts });
+
+    // Enrich each conflict descriptor with display names
+    const Timetable = (await import('../models/Timetable.js')).default;
+    const timetableCache = new Map();
+
+    const enriched = await Promise.all(rawConflicts.map(async (c) => {
+      // Timetable details (cached per unique id)
+      let tt = timetableCache.get(c.timetableId);
+      if (!tt) {
+        tt = await Timetable.findOne({ timetableId: c.timetableId }).lean() || {};
+        timetableCache.set(c.timetableId, tt);
+      }
+
+      // Resolve display names from session state
+      const teacherDoc = c.type === 'teacher'
+        ? state.allTeachers.find(t => String(t.unid) === String(c.conflictingId) || String(t.ID) === String(c.conflictingId))
+        : null;
+      const roomDoc = c.type === 'room'
+        ? state.allRooms.find(r => String(r.unid) === String(c.conflictingId) || String(r.ID) === String(c.conflictingId))
+        : null;
+
+      return {
+        ...c,
+        // Conflicting timetable context
+        displayClass:    tt.class    || c.timetableId,
+        displayBranch:   tt.branch   || '',
+        displaySemester: tt.semester || '',
+        displayType:     tt.type     || '',
+        // Entity display names
+        teacherName: teacherDoc?.name || (c.type === 'teacher' ? c.conflictingId : null),
+        roomName:    roomDoc?.name    || (c.type === 'room'    ? c.conflictingId : null),
+      };
+    }));
+
+    send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts: enriched });
   } catch (err) {
     console.error('[ws] check_cell error:', err);
     send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts: [], error: err.message });
   }
 }
+
 
 
 export function handleConnection(ws) {

@@ -26,6 +26,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/room-load" element={<RoomLoad />} />
         <Route path="/curriculum" element={<Curriculum />} />
         <Route path="/timetable" element={<Timetable />} />
+        <Route path="/timetable/:timetableId" element={<Timetable />} />
         <Route path="/room-occupancy" element={<RoomOccupancy />} />
         <Route path="/teacher-occupancy" element={<TeacherOccupancy />} />
         <Route path="/class-occupancy" element={<ClassOccupancy />} />

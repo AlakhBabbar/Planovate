@@ -26,6 +26,7 @@ const TimetableTable = ({
   wsCellSuggestions,   // { row, col, suggestions[] } | null — focused cell
   onCellFocus,         // (row, col) => void
   onCellBlur,          // () => void
+  highlightCell,       // { row, col } | null — cell to highlight after conflict nav
 }) => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -89,6 +90,8 @@ const TimetableTable = ({
                     isSuggestionFocused={isFocusedCell}
                     onCellFocus={onCellFocus}
                     onCellBlur={onCellBlur}
+                    isHighlighted={highlightCell?.row === rowIndex && highlightCell?.col === colIndex}
+                    dataCellKey={cellKey}
                   />
                 );
               })}
