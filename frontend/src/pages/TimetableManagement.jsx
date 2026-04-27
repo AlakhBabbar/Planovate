@@ -8,6 +8,7 @@ import BrowseTimetablesModal from "../components/timetableManagment/BrowseTimeta
 import TimetableInfoForm from "../components/timetableManagment/TimetableInfoForm";
 import ExportModal from "../components/timetableManagment/ExportModal";
 import ConflictPanel from "../components/timetableManagment/ConflictPanel";
+import SuggestionPanel from "../components/timetableManagment/SuggestionPanel";
 
 import useTimetableStore from "../store/timetableStore";
 import { exportTimetableToPdf, exportTimetablesToDoc, exportTimetablesToExcel, exportTimetablesToPdf } from "../utils";
@@ -19,7 +20,7 @@ import {
   generateNextTimeSlot,
   DEFAULT_TIME_SLOTS,
 } from "../utils/timetableUIHelpers";
-import { courseService, roomService, teacherService, timetableService, settingsService, curriculumService, scheduleService, tempScheduleService } from "../api";
+import { courseService, roomService, teacherService, timetableService, settingsService, curriculumService, scheduleService, tempScheduleService, conflictService } from "../api";
 import { resolveBatchDataForDisplay, convertDisplayToIds } from "../utils/idDisplayHelpers";
 import { validateAllBatchData, hasValidationErrors, getValidationSummary } from "../utils/validationHelpers";
 import { buildScheduleOccurrences, generateTimetableId } from "../utils/timetableHelpers";
@@ -69,6 +70,10 @@ const Timetable = () => {
   const [highlightCell, setHighlightCell] = useState(null); // { row, col }
   const highlightTimerRef = useRef(null);
 
+  // Global conflicts loaded from DB on page mount (shown even before any timetable is open)
+  const [globalConflicts, setGlobalConflicts] = useState([]);
+  const [globalConflictsLoading, setGlobalConflictsLoading] = useState(true);
+
   // Track loaded metadata per tab to prevent refetching on tab switch
   const loadedMetadataRef = useRef({});
 
@@ -92,6 +97,7 @@ const Timetable = () => {
 
   // ── Unsaved-changes banner ─────────────────────────────────────────────────
   const [hasUnsavedFromTemp, setHasUnsavedFromTemp] = useState(false);
+  const [wsReadyOverride, setWsReadyOverride] = useState(false);
 
   // Keep tabMetadata accessible inside async closures without stale-ref issues
   const tabMetadataRef = useRef(tabMetadata);
@@ -105,12 +111,16 @@ const Timetable = () => {
     suggestions: wsSuggestions,
     cellSuggestions: wsCellSuggestions,
     wsConflicts,
+    suggestionsEnabled: wsSuggestionsEnabled,
+    allSuggestions: wsAllSuggestions,
     openTimetable: wsOpenTimetable,
     closeTimetable: wsCloseTimetable,
     cursorMove: wsCursorMove,
     cellFocus: wsCellFocus,
     cellBlur: wsCellBlur,
     checkCell: wsCheckCell,
+    enableSuggestions: wsEnableSuggestions,
+    disableSuggestions: wsDisableSuggestions,
   } = useWebSocket();
 
   // Refs for keyboard navigation
@@ -134,10 +144,19 @@ const Timetable = () => {
     fetchOptions();
   }, [fetchOptions]);
 
-  // Pre-load timetables list so auto-load can match by fields (same data Browse uses)
+  // Pre-load timetables list so auto-load can match by fields
   useEffect(() => {
     fetchTimetables();
   }, [fetchTimetables]);
+
+  // Load global conflicts from DB on page mount
+  useEffect(() => {
+    setGlobalConflictsLoading(true);
+    conflictService.getAllConflicts()
+      .then(c => setGlobalConflicts(c))
+      .catch(console.error)
+      .finally(() => setGlobalConflictsLoading(false));
+  }, []);
 
   // ─── Helper: load + merge permanent schedules with temp schedules ────────────
   // Returns { resolvedBatchData, resolvedBatches, newTempCells, hasTempData }
@@ -637,7 +656,12 @@ const Timetable = () => {
 
   // ── Navigate to a conflicting cell in another timetable ───────────────────
   const navigateToConflict = useCallback(async (conflict) => {
-    const targetId = conflict.timetableId;
+    // TARGET = the CONFLICTING timetable (not the source/caller's)
+    const targetId = conflict.conflictingTimetableId || conflict.conflictTimetableId;
+    if (!targetId) {
+      console.warn('[navigate] missing conflictingTimetableId in conflict:', conflict);
+      return;
+    }
 
     // Check if target timetable is already open in any tab
     const existingTab = tables.find(t => {
@@ -646,46 +670,43 @@ const Timetable = () => {
     });
 
     if (existingTab) {
-      // Just switch to it
+      // Already open — just switch
       setActiveTable(existingTab);
-      navigate(`/timetable/${targetId}`, { replace: true });
     } else {
-      // Load in active tab (or open new tab logic could go here)
-      try {
-        const loadedTimetable = await timetableService.loadTimetable(targetId);
-        if (!loadedTimetable) return;
+      // Open a NEW tab with the conflict timetable metadata.
+      // The useEffect watching [className, branch, semester, type] will auto-load
+      // the schedules and open the WS session once we switch to it.
+      const newTabId = generateUniqueTableId();
 
-        setTabMetadata(prev => ({
-          ...prev,
-          [activeTable]: {
-            className: conflict.displayClass || '',
-            branch:    conflict.displayBranch || '',
-            semester:  conflict.displaySemester || '',
-            type:      conflict.displayType || '',
-            timetableId: targetId,
-          }
-        }));
-        navigate(`/timetable/${targetId}`, { replace: true });
-      } catch (e) {
-        console.error('[navigate] failed to load timetable:', e);
-        return;
-      }
+      setTabMetadata(prev => ({
+        ...prev,
+        [newTabId]: {
+          className:   conflict.displayClass    || '',
+          branch:      conflict.displayBranch   || '',
+          semester:    conflict.displaySemester || '',
+          type:        conflict.displayType     || '',
+          timetableId: targetId,
+        }
+      }));
+
+      setTables(prev => [...prev, newTabId]);
+      setActiveTable(newTabId);
     }
 
-    // Highlight the conflicting cell after a short delay (let tab switch settle)
+    navigate(`/timetable/${targetId}`, { replace: true });
+
+    // Highlight AFTER schedule has had time to load (useEffect fires ~500ms after metadata change)
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    setTimeout(() => {
+    highlightTimerRef.current = setTimeout(() => {
       setHighlightCell({ row: conflict.rowIndex, col: conflict.colIndex });
-      // Scroll cell into view
       const cellEl = document.querySelector(
         `[data-cell="${conflict.rowIndex}-${conflict.colIndex}"]`
       );
       if (cellEl) cellEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-
-      // Auto-clear highlight after 3s
+      // Auto-clear after 3s
       highlightTimerRef.current = setTimeout(() => setHighlightCell(null), 3000);
-    }, 150);
-  }, [tables, activeTable, navigate, tabMetadataRef]);
+    }, 900);
+  }, [tables, navigate, tabMetadataRef]);
 
   // ── URL param auto-load on mount ──────────────────────────────────────────
   useEffect(() => {
@@ -1176,20 +1197,16 @@ const Timetable = () => {
                 )}
               </span>
             )}
-            {/* WS compute engine status */}
+            {/* WS connection status */}
             <span className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-all ${
               wsStatus === "connected"
-                ? wsComputing
-                  ? "text-purple-700 bg-purple-50 border-purple-200"
-                  : "text-purple-600 bg-purple-50 border-purple-200"
+                ? "text-purple-600 bg-purple-50 border-purple-200"
                 : wsStatus === "connecting"
                 ? "text-gray-500 bg-gray-50 border-gray-200"
                 : "text-gray-400 bg-gray-50 border-gray-200"
             }`} title={`Compute engine: ${wsStatus}`}>
               {wsStatus === "connected" ? (
-                wsComputing
-                  ? <><Loader2 size={12} className="animate-spin" /> Computing...</>
-                  : <><Sparkles size={12} /> AI Suggestions</>
+                <><Sparkles size={12} /> Engine Ready</>
               ) : wsStatus === "connecting" ? (
                 <><Loader2 size={12} className="animate-spin" /> Connecting...</>
               ) : (
@@ -1299,7 +1316,7 @@ const Timetable = () => {
             highlightCell={highlightCell}
           />
           {/* WS not-ready overlay — locks grid until backend connection is established */}
-          {isMetadataComplete && !wsReady && (
+          {isMetadataComplete && !wsReady && !wsReadyOverride && (
             <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg z-10">
               <div className="flex flex-col items-center gap-3 text-center">
                 <Loader2 size={28} className="animate-spin text-purple-500" />
@@ -1311,6 +1328,12 @@ const Timetable = () => {
                 <p className="text-xs text-gray-400 max-w-xs">
                   Editing is disabled until the backend validation service is ready.
                 </p>
+                <button
+                  onClick={() => setWsReadyOverride(true)}
+                  className="mt-2 text-[11px] text-purple-500 underline hover:text-purple-700 transition-colors"
+                >
+                  Skip &amp; edit anyway
+                </button>
               </div>
             </div>
           )}
@@ -1358,6 +1381,25 @@ const Timetable = () => {
               focusedCell={focusedCell}
               onNavigate={navigateToConflict}
               activeMetadata={activeMetadata}
+              globalConflicts={globalConflicts}
+              globalConflictsLoading={globalConflictsLoading}
+            />
+
+            {/* AI Suggestion Panel */}
+            <SuggestionPanel
+              allSuggestions={wsAllSuggestions}
+              suggestionsEnabled={wsSuggestionsEnabled}
+              computing={wsComputing}
+              onEnable={wsEnableSuggestions}
+              onDisable={wsDisableSuggestions}
+              wsReady={wsReady}
+              onCellClick={(row, col) => {
+                if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+                setHighlightCell({ row, col });
+                const cellEl = document.querySelector(`[data-cell="${row}-${col}"]`);
+                if (cellEl) cellEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                highlightTimerRef.current = setTimeout(() => setHighlightCell(null), 3000);
+              }}
             />
           </div>
         </div>

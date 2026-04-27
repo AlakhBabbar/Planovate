@@ -70,4 +70,39 @@ router.get("/schedules", async (req, res) => {
   }
 });
 
+// ── Conflict endpoints ──────────────────────────────────────────────────────
+
+// GET /api/conflicts — all active/resolved conflicts across all timetables
+router.get("/conflicts", async (req, res) => {
+  try {
+    const { loadAllActiveConflicts } = await import("../services/conflictService.js");
+    const conflicts = await loadAllActiveConflicts();
+    res.json({ count: conflicts.length, conflicts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/conflicts/:timetableId — conflicts for a specific timetable
+router.get("/conflicts/:timetableId", async (req, res) => {
+  try {
+    const { loadConflictsForTimetable } = await import("../services/conflictService.js");
+    const conflicts = await loadConflictsForTimetable(req.params.timetableId);
+    res.json({ count: conflicts.length, conflicts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/conflicts/:timetableId — clear conflicts for a timetable (on save)
+router.delete("/conflicts/:timetableId", async (req, res) => {
+  try {
+    const { deleteConflictsForTimetable } = await import("../services/conflictService.js");
+    await deleteConflictsForTimetable(req.params.timetableId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

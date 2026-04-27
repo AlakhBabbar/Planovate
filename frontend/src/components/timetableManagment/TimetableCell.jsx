@@ -870,6 +870,35 @@ const TimetableCell = ({
     }
   };
 
+  // ── Cell-level conflict state (across ALL batches) ──────────────────────────
+  // Derive the most severe conflict state for this cell to apply the right bg color.
+  // Priority: schedule-active > temp-active > temp-resolved > none
+  const cellConflictState = (() => {
+    let hasScheduleActive = false;
+    let hasTempActive     = false;
+    let hasTempResolved   = false;
+
+    if (conflicts instanceof Map) {
+      for (let b = 0; b < batchCount; b++) {
+        const list = conflicts.get(`${rowIndex}-${colIndex}-${b}`) || [];
+        for (const c of list) {
+          if (c.status === 'resolved') {
+            hasTempResolved = true;
+          } else if (c.source === 'temp') {
+            hasTempActive = true;
+          } else {
+            hasScheduleActive = true;
+          }
+        }
+      }
+    }
+
+    if (hasScheduleActive) return 'schedule-active';
+    if (hasTempActive)     return 'temp-active';
+    if (hasTempResolved)   return 'temp-resolved';
+    return 'none';
+  })();
+
   return (
     <td
       data-cell={dataCellKey || `${rowIndex}-${colIndex}`}
@@ -878,6 +907,12 @@ const TimetableCell = ({
           ? 'ring-2 ring-indigo-400 bg-indigo-50 border-indigo-300 animate-pulse'
           : dragOver
           ? 'ring-2 ring-gray-400 bg-gray-100 border-gray-300'
+          : cellConflictState === 'schedule-active'
+          ? 'bg-red-50 border-red-300 ring-1 ring-red-200'
+          : cellConflictState === 'temp-active'
+          ? 'bg-rose-50 border-rose-200 ring-1 ring-rose-200'
+          : cellConflictState === 'temp-resolved'
+          ? 'bg-emerald-50 border-emerald-200 ring-1 ring-emerald-200'
           : isFromTemp
           ? 'bg-yellow-50 border-amber-300 ring-1 ring-amber-200'
           : isFilled

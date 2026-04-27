@@ -34,6 +34,8 @@ export function useWebSocket() {
   const [suggestions, setSuggestions]          = useState(new Map());
   const [cellSuggestions, setCellSuggestions]  = useState(null);
   const [wsConflicts, setWsConflicts]          = useState(new Map());
+  const [suggestionsEnabled, setSuggestionsEnabled] = useState(false);
+  const [allSuggestions, setAllSuggestions]    = useState({}); // key → suggestion[]
 
   // ── Connection ─────────────────────────────────────────────────────────────
 
@@ -71,6 +73,7 @@ export function useWebSocket() {
           break;
 
         case 'computing':
+          console.log(`[ws-frontend] computing status: ${msg.status}`);
           setComputing(msg.status === 'started');
           break;
 
@@ -109,9 +112,47 @@ export function useWebSocket() {
           break;
         }
 
+        // Stored conflicts loaded from DB on timetable open ← open_timetable_ack
+        case 'stored_conflicts': {
+          setWsConflicts(prev => {
+            const next = new Map(prev);
+            for (const c of (msg.conflicts || [])) {
+              const key = `${c.rowIndex}-${c.colIndex}-${c.batchIndex ?? 0}`;
+              const existing = next.get(key) || [];
+              // Avoid duplicating same conflict key
+              const already = existing.some(e =>
+                e.type === c.type && e.conflictingId === c.conflictingId &&
+                e.conflictingTimetableId === c.conflictingTimetableId
+              );
+              if (!already) next.set(key, [...existing, c]);
+            }
+            return next;
+          });
+          break;
+        }
+
         case 'warning':
           console.warn('[ws]', msg.message);
           break;
+
+        case 'suggestions_enabled':
+          setSuggestionsEnabled(true);
+          break;
+
+        case 'suggestions_disabled':
+          setSuggestionsEnabled(false);
+          setSuggestions(new Map());
+          setCellSuggestions(null);
+          setAllSuggestions({});
+          break;
+
+        case 'all_suggestions': {
+          const s = msg.suggestions || {};
+          const cellCount = Object.keys(s).length;
+          console.log(`[ws-frontend] all_suggestions received — ${cellCount} cells`);
+          setAllSuggestions(s);
+          break;
+        }
 
         case 'error':
           console.error('[ws] server error:', msg.message);
@@ -156,6 +197,8 @@ export function useWebSocket() {
     setCellSuggestions(null);
     setWsConflicts(new Map());
     setWsReady(false);
+    setComputing(false);
+    setSuggestionsEnabled(false);
     const payload = { type: 'open_timetable', timetableId, meta, days, timeSlots };
     pendingOpen.current = payload;
     sendMsg(payload);
@@ -167,6 +210,8 @@ export function useWebSocket() {
     setCellSuggestions(null);
     setWsConflicts(new Map());
     setWsReady(false);
+    setComputing(false);
+    setSuggestionsEnabled(false);
     pendingOpen.current = null;
   }, [sendMsg]);
 
@@ -194,6 +239,18 @@ export function useWebSocket() {
     sendMsg({ type: 'check_cell', row, col, batchIndex, day, time, teacherId, roomId });
   }, [sendMsg]);
 
+  const enableSuggestions = useCallback(() => {
+    sendMsg({ type: 'enable_suggestions' });
+  }, [sendMsg]);
+
+  const disableSuggestions = useCallback(() => {
+    sendMsg({ type: 'disable_suggestions' });
+    setSuggestionsEnabled(false);
+    setSuggestions(new Map());
+    setCellSuggestions(null);
+    setAllSuggestions({});
+  }, [sendMsg]);
+
   return {
     wsRef,
     wsStatus,
@@ -202,11 +259,15 @@ export function useWebSocket() {
     suggestions,
     cellSuggestions,
     wsConflicts,
+    suggestionsEnabled,
+    allSuggestions,
     openTimetable,
     closeTimetable,
     cursorMove,
     cellFocus,
     cellBlur,
     checkCell,
+    enableSuggestions,
+    disableSuggestions,
   };
 }

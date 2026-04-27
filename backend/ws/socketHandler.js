@@ -23,6 +23,7 @@ import { getAllCurriculums, findCurriculumForMeta } from '../services/curriculum
 import { computeSuggestionGrid } from '../engine/computeEngine.js';
 import { getNeighborSuggestions } from '../engine/suggestionBuilder.js';
 import { checkCellConflicts } from '../engine/conflictEngine.js';
+import { upsertConflicts, resolveConflictsForCell, loadConflictsForTimetable } from '../services/conflictService.js';
 
 const DWELL_MS = 2500; // ms user must stay on cell before suggestions fire
 
@@ -50,6 +51,7 @@ function createClientState() {
     recomputeTimer: null,
     dwellTimer: null,
     isComputing: false,
+    suggestionsEnabled: false,
   };
 }
 
@@ -58,15 +60,48 @@ function send(ws, data) {
 }
 
 function scheduleRecompute(ws, state) {
+  // Only compute if suggestions have been explicitly enabled by the user
+  if (!state.suggestionsEnabled) {
+    console.log('[compute] SKIP — suggestions not enabled by user');
+    return;
+  }
+
   if (state.recomputeTimer) clearTimeout(state.recomputeTimer);
 
+  console.log('[compute] scheduling recompute in 400ms...');
+
   state.recomputeTimer = setTimeout(async () => {
-    if (!state.curriculum) return;
+    console.log('[compute] ── RECOMPUTE TRIGGERED ──');
+    console.log(`[compute]   timetableId:       ${state.timetableId}`);
+    console.log(`[compute]   curriculum:        ${state.curriculum ? 'YES (' + (state.curriculum.courses?.length ?? 0) + ' courses)' : 'NONE'}`);
+    console.log(`[compute]   currentSchedules:  ${state.currentSchedules.length}`);
+    console.log(`[compute]   otherSchedules:    ${state.otherSchedules.length}`);
+    console.log(`[compute]   allCourses:        ${state.allCourses.length}`);
+    console.log(`[compute]   allTeachers:       ${state.allTeachers.length}`);
+    console.log(`[compute]   allRooms:          ${state.allRooms.length}`);
+    console.log(`[compute]   days:              ${state.days.join(', ')}`);
+    console.log(`[compute]   timeSlots:         ${state.timeSlots.length} (${state.timeSlots.slice(0, 3).join(', ')}${state.timeSlots.length > 3 ? '...' : ''})`);
+
+    if (!state.curriculum) {
+      console.warn('[compute] ABORT — no curriculum found for this timetable. Suggestions require a curriculum.');
+      send(ws, { type: 'computing', status: 'done' });
+      send(ws, { type: 'all_suggestions', suggestions: {} });
+      return;
+    }
+
+    if (state.timeSlots.length === 0) {
+      console.warn('[compute] ABORT — no timeSlots. Cannot generate grid without time slots.');
+      send(ws, { type: 'computing', status: 'done' });
+      send(ws, { type: 'all_suggestions', suggestions: {} });
+      return;
+    }
 
     state.isComputing = true;
     send(ws, { type: 'computing', status: 'started' });
+    console.log('[compute] STATUS → started (sent to frontend)');
 
     try {
+      const startMs = Date.now();
       const grid = computeSuggestionGrid({
         currentSchedules: state.currentSchedules,
         otherSchedules: state.otherSchedules,
@@ -77,10 +112,19 @@ function scheduleRecompute(ws, state) {
         days: state.days,
         timeSlots: state.timeSlots,
       });
+      const elapsed = Date.now() - startMs;
 
       state.suggestionGrid = grid;
       state.isComputing = false;
+
+      let totalSuggestions = 0;
+      for (const arr of grid.values()) totalSuggestions += arr.length;
+
+      console.log(`[compute] ✓ DONE in ${elapsed}ms — ${grid.size} cells, ${totalSuggestions} total suggestions`);
       send(ws, { type: 'computing', status: 'done' });
+
+      // Send all suggestions to frontend for sidebar panel
+      sendAllSuggestions(ws, state);
 
       // Push neighbor suggestions if cursor is set
       if (state.cursorRow !== null && state.cursorCol !== null) {
@@ -88,11 +132,30 @@ function scheduleRecompute(ws, state) {
       }
     } catch (err) {
       state.isComputing = false;
-      console.error('[ws] compute error:', err);
+      console.error('[compute] ✗ ERROR:', err.message);
+      console.error(err.stack);
       send(ws, { type: 'computing', status: 'cancelled' });
       send(ws, { type: 'error', message: err.message });
     }
   }, 400);
+}
+
+/**
+ * Send the full suggestion grid to the frontend in one shot.
+ * Frontend uses this to populate the SuggestionPanel sidebar.
+ */
+function sendAllSuggestions(ws, state) {
+  if (!state.suggestionGrid) return;
+  const allSuggestions = {};
+  let totalCount = 0;
+  for (const [key, suggestions] of state.suggestionGrid.entries()) {
+    if (suggestions && suggestions.length > 0) {
+      allSuggestions[key] = suggestions;
+      totalCount += suggestions.length;
+    }
+  }
+  console.log(`[ws] sending all_suggestions — ${Object.keys(allSuggestions).length} cells, ${totalCount} total suggestions`);
+  send(ws, { type: 'all_suggestions', suggestions: allSuggestions });
 }
 
 function sendNeighborSuggestions(ws, state, type = 'suggestions') {
@@ -139,8 +202,6 @@ async function handleOpenTimetable(ws, state, payload) {
   state.suggestionGrid = null;
   state.days      = days      || ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
   state.timeSlots = timeSlots || [];
-
-  send(ws, { type: 'computing', status: 'started' });
 
   try {
     // Fetch all static data in parallel
@@ -198,10 +259,21 @@ async function handleOpenTimetable(ws, state, payload) {
     );
 
     send(ws, { type: 'open_timetable_ack', timetableId });
+
+    // Push stored conflicts for this timetable (persisted from previous sessions)
+    try {
+      const storedConflicts = await loadConflictsForTimetable(timetableId);
+      if (storedConflicts.length) {
+        send(ws, { type: 'stored_conflicts', timetableId, conflicts: storedConflicts });
+      }
+    } catch (e) {
+      console.warn('[ws] could not load stored conflicts:', e.message);
+    }
   } catch (err) {
     console.error('[ws] open_timetable error:', err);
     send(ws, { type: 'error', message: err.message });
-    send(ws, { type: 'computing', status: 'cancelled' });
+    // Still send ack so frontend overlay doesn't get stuck
+    send(ws, { type: 'open_timetable_ack', timetableId });
   }
 }
 
@@ -273,14 +345,15 @@ async function handleCheckCell(ws, state, payload) {
     const timetableCache = new Map();
 
     const enriched = await Promise.all(rawConflicts.map(async (c) => {
-      // Timetable details (cached per unique id)
-      let tt = timetableCache.get(c.timetableId);
+      // Look up the CONFLICTING timetable's display info (not the caller's)
+      const lookupId = c.conflictingTimetableId;
+      let tt = timetableCache.get(lookupId);
       if (!tt) {
-        tt = await Timetable.findOne({ timetableId: c.timetableId }).lean() || {};
-        timetableCache.set(c.timetableId, tt);
+        tt = await Timetable.findOne({ timetableId: lookupId }).lean() || {};
+        timetableCache.set(lookupId, tt);
       }
 
-      // Resolve display names from session state
+      // Resolve entity display names from session state
       const teacherDoc = c.type === 'teacher'
         ? state.allTeachers.find(t => String(t.unid) === String(c.conflictingId) || String(t.ID) === String(c.conflictingId))
         : null;
@@ -290,8 +363,10 @@ async function handleCheckCell(ws, state, payload) {
 
       return {
         ...c,
-        // Conflicting timetable context
-        displayClass:    tt.class    || c.timetableId,
+        // Source timetable (the open one being edited)
+        sourceTimetableId:   state.timetableId,
+        // Conflicting timetable display fields
+        displayClass:    tt.class    || lookupId,
         displayBranch:   tt.branch   || '',
         displaySemester: tt.semester || '',
         displayType:     tt.type     || '',
@@ -302,6 +377,32 @@ async function handleCheckCell(ws, state, payload) {
     }));
 
     send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts: enriched });
+
+    // Persist to Conflict collection
+    try {
+      if (enriched.length) {
+        await upsertConflicts(enriched.map(c => ({
+          ...c,
+          // Source = the timetable being edited
+          sourceTimetableId:  state.timetableId,
+          sourceScheduleType: 'temp', // user is editing a temp cell
+          rowIndex: row,
+          colIndex: col,
+          batchIndex,
+        })));
+      } else {
+        // No conflicts → resolve any existing ones for this cell
+        await resolveConflictsForCell({
+          sourceTimetableId: state.timetableId,
+          rowIndex: row,
+          colIndex: col,
+          batchIndex,
+        });
+      }
+    } catch (e) {
+      console.warn('[ws] conflict persist error:', e.message);
+    }
+
   } catch (err) {
     console.error('[ws] check_cell error:', err);
     send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts: [], error: err.message });
@@ -327,6 +428,22 @@ export function handleConnection(ws) {
       case 'cursor_move':     handleCursorMove(ws, state, msg); break;
       case 'cell_focus':      handleCellFocus(ws, state, msg); break;
       case 'check_cell':      await handleCheckCell(ws, state, msg); break;
+      case 'enable_suggestions': {
+        console.log('[ws] suggestions ENABLED by user');
+        state.suggestionsEnabled = true;
+        send(ws, { type: 'suggestions_enabled' });
+        // Always trigger compute — curriculum alone is enough for suggestions
+        scheduleRecompute(ws, state);
+        break;
+      }
+      case 'disable_suggestions': {
+        console.log('[ws] suggestions DISABLED by user');
+        state.suggestionsEnabled = false;
+        if (state.recomputeTimer) { clearTimeout(state.recomputeTimer); state.recomputeTimer = null; }
+        state.suggestionGrid = null;
+        send(ws, { type: 'suggestions_disabled' });
+        break;
+      }
       case 'close_timetable': handleCloseTimetable(ws, state); break;
       default: send(ws, { type: 'error', message: `Unknown type: ${msg.type}` });
     }

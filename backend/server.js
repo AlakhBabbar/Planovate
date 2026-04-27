@@ -45,6 +45,7 @@ app.use("/api/timetables", timetableRoutes);
 app.use("/api/schedules", scheduleRoutes);
 app.use("/api/tempschedules", tempScheduleRoutes);
 app.use("/api/settings", settingRoutes);
+app.use("/api", apiRoutes);
 
 // ── HTTP + WebSocket ─────────────────────────────────────────────────────────
 const server = createServer(app);
