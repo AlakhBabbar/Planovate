@@ -22,6 +22,7 @@ import { getAllRooms } from '../services/roomService.js';
 import { getAllCurriculums, findCurriculumForMeta } from '../services/curriculumService.js';
 import { computeSuggestionGrid } from '../engine/computeEngine.js';
 import { getNeighborSuggestions } from '../engine/suggestionBuilder.js';
+import { checkCellConflicts } from '../engine/conflictEngine.js';
 
 const DWELL_MS = 2500; // ms user must stay on cell before suggestions fire
 
@@ -243,6 +244,37 @@ function handleCloseTimetable(ws, state) {
   state.cursorCol         = null;
 }
 
+async function handleCheckCell(ws, state, payload) {
+  const { row, col, batchIndex = 0, day, time, teacherId, roomId } = payload;
+
+  if (!state.timetableId) {
+    send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts: [] });
+    return;
+  }
+  if (!day || !time) {
+    send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts: [] });
+    return;
+  }
+
+  try {
+    const conflicts = await checkCellConflicts({
+      timetableId: state.timetableId,
+      day,
+      time,
+      rowIndex:   row,
+      colIndex:   col,
+      batchIndex,
+      teacherId:  teacherId || null,
+      roomId:     roomId    || null,
+    });
+    send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts });
+  } catch (err) {
+    console.error('[ws] check_cell error:', err);
+    send(ws, { type: 'conflict_result', row, col, batchIndex, conflicts: [], error: err.message });
+  }
+}
+
+
 export function handleConnection(ws) {
   const state = createClientState();
 
@@ -259,6 +291,7 @@ export function handleConnection(ws) {
       case 'open_timetable':  await handleOpenTimetable(ws, state, msg); break;
       case 'cursor_move':     handleCursorMove(ws, state, msg); break;
       case 'cell_focus':      handleCellFocus(ws, state, msg); break;
+      case 'check_cell':      await handleCheckCell(ws, state, msg); break;
       case 'close_timetable': handleCloseTimetable(ws, state); break;
       default: send(ws, { type: 'error', message: `Unknown type: ${msg.type}` });
     }

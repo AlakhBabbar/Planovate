@@ -1,45 +1,57 @@
 /**
- * useWebSocket — manages a single WebSocket connection to the compute engine.
+ * useWebSocket — WebSocket connection to compute engine.
  *
- * Returns:
- *   wsRef          — ref to the WebSocket instance (for sending messages)
- *   suggestions    — Map<"row-col", suggestion[]> for the full grid
- *   cellSuggestions— { row, col, suggestions[] } for the focused cell
- *   wsStatus       — "connecting"|"connected"|"disconnected"|"error"
- *   computing      — boolean
+ * Exposes:
+ *   wsStatus          "connecting" | "connected" | "disconnected" | "error"
+ *   wsReady           boolean — true only when connected AND timetable is acked
+ *   computing         boolean — grid recompute in progress
+ *   suggestions       Map<"row-col", suggestion[]>
+ *   cellSuggestions   { row, col, suggestions[] } | null
+ *   wsConflicts       Map<"row-col-batchIndex", ConflictDescriptor[]>
  *
- * Caller should:
- *   - Call openTimetable(timetableId, meta, days, timeSlots) when timetable loads
- *   - Call cellFocus(row, col) on mouse-enter (2.5s dwell handled server-side)
- *   - Call cursorMove(row, col) on click/keyboard move
- *   - Call closeTimetable() on unmount
+ * Actions:
+ *   openTimetable(id, meta, days, timeSlots)
+ *   closeTimetable()
+ *   cursorMove(row, col)
+ *   cellFocus(row, col)
+ *   cellBlur()
+ *   checkCell(row, col, batchIndex, { day, time, teacherId, roomId })
  */
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 
 const WS_URL = `ws://localhost:3001`;
+const RECONNECT_DELAY = 3000;
 
 export function useWebSocket() {
-  const wsRef    = useRef(null);
+  const wsRef          = useRef(null);
   const reconnectTimer = useRef(null);
+  const pendingOpen    = useRef(null); // payload to re-send after reconnect
 
-  const [wsStatus, setWsStatus]           = useState('disconnected');
-  const [computing, setComputing]          = useState(false);
-  const [suggestions, setSuggestions]      = useState(new Map());
-  const [cellSuggestions, setCellSuggestions] = useState(null);
+  const [wsStatus, setWsStatus]               = useState('disconnected');
+  const [wsReady,  setWsReady]                = useState(false);
+  const [computing, setComputing]              = useState(false);
+  const [suggestions, setSuggestions]          = useState(new Map());
+  const [cellSuggestions, setCellSuggestions]  = useState(null);
+  const [wsConflicts, setWsConflicts]          = useState(new Map());
 
-  // ── Connection ────────────────────────────────────────────────────────────
+  // ── Connection ─────────────────────────────────────────────────────────────
 
   const connect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState <= 1) return; // already connecting/open
+    if (wsRef.current && wsRef.current.readyState <= 1) return;
 
     setWsStatus('connecting');
+    setWsReady(false);
+
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setWsStatus('connected');
-      console.log('[ws] connected');
+      // Re-send open_timetable if we were previously in a session
+      if (pendingOpen.current) {
+        ws.send(JSON.stringify(pendingOpen.current));
+      }
     };
 
     ws.onmessage = (event) => {
@@ -48,15 +60,21 @@ export function useWebSocket() {
       catch { return; }
 
       switch (msg.type) {
+
         case 'connected':
           setWsStatus('connected');
+          break;
+
+        case 'open_timetable_ack':
+          // Now fully ready — unlock the UI
+          setWsReady(true);
           break;
 
         case 'computing':
           setComputing(msg.status === 'started');
           break;
 
-        // Full neighbor grid (after cursor_move)
+        // Neighbor suggestions after cursor_move
         case 'suggestions':
         case 'suggestions_updated': {
           const { neighbors } = msg;
@@ -64,23 +82,32 @@ export function useWebSocket() {
           setSuggestions(prev => {
             const next = new Map(prev);
             for (const dir of Object.values(neighbors)) {
-              if (dir && dir.suggestions?.length) {
-                next.set(`${dir.row}-${dir.col}`, dir.suggestions);
-              }
+              if (dir?.suggestions?.length) next.set(`${dir.row}-${dir.col}`, dir.suggestions);
             }
             return next;
           });
           break;
         }
 
-        // Focused cell suggestions (after 2.5s dwell)
+        // Focused cell suggestions after 2.5s dwell
         case 'cell_suggestions':
           setCellSuggestions({ row: msg.row, col: msg.col, suggestions: msg.suggestions || [] });
           break;
 
-        case 'open_timetable_ack':
-          console.log('[ws] timetable open acked:', msg.timetableId);
+        // Backend conflict result ← check_cell
+        case 'conflict_result': {
+          const key = `${msg.row}-${msg.col}-${msg.batchIndex ?? 0}`;
+          setWsConflicts(prev => {
+            const next = new Map(prev);
+            if (msg.conflicts && msg.conflicts.length > 0) {
+              next.set(key, msg.conflicts);
+            } else {
+              next.delete(key); // clear resolved conflict
+            }
+            return next;
+          });
           break;
+        }
 
         case 'warning':
           console.warn('[ws]', msg.message);
@@ -95,20 +122,19 @@ export function useWebSocket() {
       }
     };
 
-    ws.onerror = (err) => {
-      console.error('[ws] error', err);
+    ws.onerror = () => {
       setWsStatus('error');
+      setWsReady(false);
     };
 
     ws.onclose = () => {
       setWsStatus('disconnected');
+      setWsReady(false);
       wsRef.current = null;
-      // Auto-reconnect after 3s
-      reconnectTimer.current = setTimeout(connect, 3000);
+      reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
     };
   }, []);
 
-  // Connect on mount, disconnect on unmount
   useEffect(() => {
     connect();
     return () => {
@@ -128,18 +154,24 @@ export function useWebSocket() {
   const openTimetable = useCallback((timetableId, meta, days, timeSlots) => {
     setSuggestions(new Map());
     setCellSuggestions(null);
-    sendMsg({ type: 'open_timetable', timetableId, meta, days, timeSlots });
+    setWsConflicts(new Map());
+    setWsReady(false);
+    const payload = { type: 'open_timetable', timetableId, meta, days, timeSlots };
+    pendingOpen.current = payload;
+    sendMsg(payload);
   }, [sendMsg]);
 
   const closeTimetable = useCallback(() => {
     sendMsg({ type: 'close_timetable' });
     setSuggestions(new Map());
     setCellSuggestions(null);
+    setWsConflicts(new Map());
+    setWsReady(false);
+    pendingOpen.current = null;
   }, [sendMsg]);
 
   const cursorMove = useCallback((row, col) => {
     sendMsg({ type: 'cursor_move', row, col });
-    // Clear focused suggestions when moving
     setCellSuggestions(null);
   }, [sendMsg]);
 
@@ -148,20 +180,33 @@ export function useWebSocket() {
   }, [sendMsg]);
 
   const cellBlur = useCallback(() => {
-    // Clear cell suggestions when leaving a cell
     setCellSuggestions(null);
   }, []);
+
+  /**
+   * Send a cell change to backend for conflict validation.
+   * @param {number} row
+   * @param {number} col
+   * @param {number} batchIndex
+   * @param {{ day: string, time: string, teacherId?: string, roomId?: string }} data
+   */
+  const checkCell = useCallback((row, col, batchIndex, { day, time, teacherId, roomId }) => {
+    sendMsg({ type: 'check_cell', row, col, batchIndex, day, time, teacherId, roomId });
+  }, [sendMsg]);
 
   return {
     wsRef,
     wsStatus,
+    wsReady,
     computing,
     suggestions,
     cellSuggestions,
+    wsConflicts,
     openTimetable,
     closeTimetable,
     cursorMove,
     cellFocus,
     cellBlur,
+    checkCell,
   };
 }

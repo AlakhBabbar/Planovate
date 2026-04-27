@@ -133,7 +133,7 @@ export function updateBatchData({
   };
   
   let conflictResult = null;
-  if (field === "teacher" || field === "room") {
+  if (checkConflictsFn && typeof checkConflictsFn === 'function' && (field === "teacher" || field === "room")) {
     conflictResult = checkConflictsFn({
       rowIndex,
       colIndex,

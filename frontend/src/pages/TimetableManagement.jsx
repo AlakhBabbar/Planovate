@@ -6,15 +6,13 @@ import TimetableTable from "../components/timetableManagment/TimetableTable";
 import BrowseTimetablesModal from "../components/timetableManagment/BrowseTimetablesModal";
 import TimetableInfoForm from "../components/timetableManagment/TimetableInfoForm";
 import ExportModal from "../components/timetableManagment/ExportModal";
-import { checkConflicts } from "../utils/Conflict";
+
 import useTimetableStore from "../store/timetableStore";
 import { exportTimetableToPdf, exportTimetablesToDoc, exportTimetablesToExcel, exportTimetablesToPdf } from "../utils";
 import {
   checkExistingTimetable,
-  calculateConflictStats,
   createBatchInCell,
   updateBatchData,
-  updateConflictsState,
   generateTableName,
   generateNextTimeSlot,
   DEFAULT_TIME_SLOTS,
@@ -55,7 +53,6 @@ const Timetable = () => {
 
   const [batches, setBatches] = useState({});
   const [batchData, setBatchData] = useState({});
-  const [conflicts, setConflicts] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
   const [showExportModal, setShowExportModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -88,17 +85,20 @@ const Timetable = () => {
   const tabMetadataRef = useRef(tabMetadata);
   useEffect(() => { tabMetadataRef.current = tabMetadata; }, [tabMetadata]);
 
-  // ── WebSocket connection (compute engine for suggestions) ──────────────────
+  // ── WebSocket connection (compute engine + conflict detection) ───────────────
   const {
     wsStatus,
+    wsReady,
     computing: wsComputing,
     suggestions: wsSuggestions,
     cellSuggestions: wsCellSuggestions,
+    wsConflicts,
     openTimetable: wsOpenTimetable,
     closeTimetable: wsCloseTimetable,
     cursorMove: wsCursorMove,
     cellFocus: wsCellFocus,
     cellBlur: wsCellBlur,
+    checkCell: wsCheckCell,
   } = useWebSocket();
 
   // Refs for keyboard navigation
@@ -581,7 +581,7 @@ const Timetable = () => {
   const updateBatch = (rowIndex, colIndex, batchIndex, field, value) => {
     const cellKey = `${rowIndex}-${colIndex}-${batchIndex}`;
     setBatchData((prev) => {
-      const { updatedBatchData, conflictResult } = updateBatchData({
+      const { updatedBatchData } = updateBatchData({
         currentBatchData: prev,
         currentBatches: batches,
         activeTable,
@@ -591,18 +591,27 @@ const Timetable = () => {
         field,
         value,
         tables,
-        checkConflictsFn: checkConflicts,
+        // No frontend conflict check — backend handles it via WS
       });
-
-      if (conflictResult) {
-        setConflicts((prevConflicts) =>
-          updateConflictsState(prevConflicts, activeTable, cellKey, field, conflictResult)
-        );
-      }
 
       // Track this cell as a recent change for auto-save
       const updatedCell = (updatedBatchData[activeTable] || {})[cellKey] || {};
       syncRecentChanges((prev) => ({ ...prev, [cellKey]: updatedCell }));
+
+      // ── Send to backend for real-time conflict validation ───────────────
+      // Only check when teacher or room changes (the two conflict-relevant fields)
+      if ((field === 'teacherId' || field === 'roomId') && wsReady) {
+        const currentCell = (updatedBatchData[activeTable] || {})[cellKey] || {};
+        const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+        const day  = days[colIndex] || '';
+        const time = timeSlots[rowIndex] || '';
+        wsCheckCell(rowIndex, colIndex, batchIndex, {
+          day,
+          time,
+          teacherId: field === 'teacherId' ? value : (currentCell.teacherId || ''),
+          roomId:    field === 'roomId'    ? value : (currentCell.roomId    || ''),
+        });
+      }
 
       return updatedBatchData;
     });
@@ -716,7 +725,18 @@ const Timetable = () => {
     });
   };
 
-  const stats = calculateConflictStats(conflicts);
+  // Derive conflict stats directly from backend wsConflicts Map
+  const stats = (() => {
+    let teacherConflicts = 0;
+    let roomConflicts = 0;
+    for (const list of wsConflicts.values()) {
+      for (const c of list) {
+        if (c.type === 'teacher') teacherConflicts++;
+        else if (c.type === 'room') roomConflicts++;
+      }
+    }
+    return { teacherConflicts, roomConflicts };
+  })();
   
   // Calculate validation stats
   const activeValidationErrors = validationErrors[activeTable] || {};
@@ -1175,7 +1195,7 @@ const Timetable = () => {
             timeSlots={timeSlots}
             batches={batches[activeTable] || {}}
             batchData={batchData[activeTable] || {}}
-            conflicts={conflicts[activeTable] || {}}
+            conflicts={wsConflicts}
             validationErrors={validationErrors[activeTable] || {}}
             courseOptions={courseOptions}
             teacherOptions={teacherOptions}
@@ -1196,6 +1216,23 @@ const Timetable = () => {
             onCellFocus={wsCellFocus}
             onCellBlur={wsCellBlur}
           />
+          {/* WS not-ready overlay — locks grid until backend connection is established */}
+          {isMetadataComplete && !wsReady && (
+            <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg z-10">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <Loader2 size={28} className="animate-spin text-purple-500" />
+                <p className="text-sm font-semibold text-gray-700">
+                  {wsStatus === 'connecting' || wsStatus === 'disconnected'
+                    ? 'Reconnecting to compute engine…'
+                    : 'Connecting to compute engine…'}
+                </p>
+                <p className="text-xs text-gray-400 max-w-xs">
+                  Editing is disabled until the backend validation service is ready.
+                </p>
+              </div>
+            </div>
+          )}
+          {/* Metadata-incomplete overlay */}
           {!isMetadataComplete && (
             <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg z-10 pointer-events-all">
               <div className="flex flex-col items-center gap-3 text-center">

@@ -52,8 +52,8 @@ const BrowseTimetablesModal = ({ isOpen, onClose, onSelectTimetable, timetableSe
               </thead>
               <tbody>
                 {allTimetables.map((tt, index) => (
-                  <tr 
-                    key={tt.timetableId} 
+                  <tr
+                    key={tt.timetableId || tt._id || index}
                     className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                   >
                     <td className="py-3 text-sm text-gray-900">{tt.class || "-"}</td>

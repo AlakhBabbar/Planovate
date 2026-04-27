@@ -1004,12 +1004,15 @@ const TimetableCell = ({
         {Array.from({ length: batchCount }).map((_, batchIndex) => {
           const dataKey = `${rowIndex}-${colIndex}-${batchIndex}`;
           const batch = batchData[dataKey] || {};
-          const conflictInfo = conflicts?.[dataKey] || {};
-          const validationInfo = validationErrors?.[dataKey] || {};
-          const hasTeacherConflict = conflictInfo.teacher?.conflict;
-          const hasRoomConflict = conflictInfo.room?.conflict;
+          // conflicts is Map<"row-col-batchIndex", ConflictDescriptor[]> (backend-driven)
+          const conflictList = conflicts instanceof Map
+            ? (conflicts.get(dataKey) || [])
+            : [];
+          const hasTeacherConflict = conflictList.some(c => c.type === 'teacher');
+          const hasRoomConflict    = conflictList.some(c => c.type === 'room');
           
           // Validation errors
+          const validationInfo = validationErrors?.[dataKey] || {};
           const hasCourseError = validationInfo.course && !validationInfo.course.isValid;
           const hasTeacherError = validationInfo.teacher && !validationInfo.teacher.isValid;
           const hasRoomError = validationInfo.room && !validationInfo.room.isValid;
