@@ -266,7 +266,7 @@ export async function resolveBatchDataForDisplay(batchData) {
  * Returns ONLY IDs (courseId, teacherId, roomId), not display names
  * Display names will be removed from the returned object
  */
-export async function convertDisplayToIds(batchData) {
+export async function convertDisplayToIds(batchData, keepDisplay = false) {
   const converted = {};
   
   // Fetch all caches
@@ -304,10 +304,17 @@ export async function convertDisplayToIds(batchData) {
   
   // Convert each batch entry
   for (const [key, value] of Object.entries(batchData)) {
-    // Start with only batchName - NO display names
+    // Start with only batchName
     converted[key] = {
       batchName: value.batchName || ""
     };
+    
+    // Preserve display names if requested
+    if (keepDisplay) {
+      if (value.course) converted[key].course = value.course;
+      if (value.teacher) converted[key].teacher = value.teacher;
+      if (value.room) converted[key].room = value.room;
+    }
     
     // If IDs already exist, use them
     if (value.courseId) {

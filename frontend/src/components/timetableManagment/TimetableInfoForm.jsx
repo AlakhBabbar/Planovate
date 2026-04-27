@@ -89,6 +89,9 @@ const TimetableInfoForm = ({
           disabled={isLoadingExisting}
         >
           <option value="">Select Program</option>
+          {isProgramSelected && !(programs || []).includes(selectedProgram) && (
+            <option key={selectedProgram} value={selectedProgram}>{selectedProgram}</option>
+          )}
           {(programs || []).map((p) => (
             <option key={p} value={p}>{p}</option>
           ))}
@@ -105,6 +108,9 @@ const TimetableInfoForm = ({
             <option value="">
               {!isProgramSelected ? "— Select Program first —" : "Select Branch/Batch"}
             </option>
+            {isBranchSelected && !filteredBranches.find(b => b.name === selectedBranch) && (
+              <option key={selectedBranch} value={selectedBranch}>{selectedBranch}</option>
+            )}
             {filteredBranches.map((b) => (
               <option key={b.name} value={b.name}>{b.name}</option>
             ))}
@@ -127,6 +133,9 @@ const TimetableInfoForm = ({
             <option value="">
               {!isBranchSelected ? "— Select Branch first —" : "Select Semester"}
             </option>
+            {isSemesterSelected && !semesterOptions.includes(selectedSemester) && (
+              <option key={selectedSemester} value={selectedSemester}>{selectedSemester}</option>
+            )}
             {semesterOptions.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}

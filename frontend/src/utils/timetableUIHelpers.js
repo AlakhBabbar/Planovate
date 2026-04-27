@@ -182,8 +182,9 @@ export function updateConflictsState(currentConflicts, activeTable, key, field, 
 /**
  * Generates a new table name
  */
-export function generateTableName(currentTables) {
-  return `Table ${currentTables.length + 1}`;
+export function generateTableName(activeTable, tables) {
+  const index = Array.isArray(tables) ? tables.indexOf(activeTable) : 0;
+  return `Table ${(index >= 0 ? index : 0) + 1}`;
 }
 
 /**

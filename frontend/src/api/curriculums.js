@@ -1,24 +1,29 @@
-import { apiFetch, createQueryString } from "./apiClient";
+import { apiFetch } from "./apiClient";
 
 export async function getCurriculum(id) {
   const res = await apiFetch(`/curriculums/${id}`);
   return res ? res : null;
 }
 
-export async function saveCurriculum(id, courses) {
-  const [classVal, branchVal, semesterVal, typeVal] = id.split("_");
+/**
+ * Save (create or update) a curriculum.
+ * @param {string} id - curriculumId
+ * @param {Array}  courses - [{ courseId, teacherIds[] }]
+ * @param {Object} meta - { className, branch, semester, type } (optional override)
+ */
+export async function saveCurriculum(id, courses, meta = {}) {
   const payload = {
     curriculumId: id,
-    class: classVal,
-    branch: branchVal,
-    semester: semesterVal,
-    type: typeVal,
-    courses: courses.map(c => ({
-      courseId: String(c.courseId),
+    class: meta.className || meta.class || '',
+    branch: meta.branch || '',
+    semester: meta.semester || '',
+    type: meta.type || '',
+    courses: (courses || []).map(c => ({
+      courseId: String(c.courseId ?? c.unid ?? c.ID ?? ''),
       teacherIds: c.teacherIds || [],
     })),
   };
-  await apiFetch(`/curriculums/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+  return await apiFetch(`/curriculums/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 
 export async function deleteCurriculum(id) {

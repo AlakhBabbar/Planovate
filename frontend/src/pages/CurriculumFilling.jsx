@@ -7,6 +7,64 @@ import {
 } from "../api";
 import CurriculumModal from "../components/timetableManagment/CurriculumModal";
 
+// ── Helpers ──────────────────────────────────────────────────────────────
+function generateCurriculumId({ className, branch, semester, type }) {
+  return `curr_${className}_${branch}_${semester}_${type}`
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+}
+
+/**
+ * Derive unique (class, branch, semester, type) groups + their courses from
+ * a flat list of schedule documents.
+ */
+function extractCurriculumFromSchedules(schedules) {
+  const groupMap = new Map();
+
+  for (const s of schedules) {
+    const className = s.class || '';
+    const branch    = s.branch || '';
+    const semester  = s.semester || '';
+    const type      = s.type || '';
+    if (!className && !branch) continue;
+
+    const groupKey = `${className}|${branch}|${semester}|${type}`;
+    if (!groupMap.has(groupKey)) {
+      groupMap.set(groupKey, {
+        classKey: groupKey,
+        className,
+        branch,
+        semester,
+        type,
+        courseMap: new Map(), // courseId → Set<teacherId>
+      });
+    }
+
+    const group = groupMap.get(groupKey);
+    if (s.courseId) {
+      if (!group.courseMap.has(String(s.courseId))) {
+        group.courseMap.set(String(s.courseId), new Set());
+      }
+      if (s.teacherId) {
+        group.courseMap.get(String(s.courseId)).add(String(s.teacherId));
+      }
+    }
+  }
+
+  return Array.from(groupMap.values()).map(g => ({
+    classKey:  g.classKey,
+    className: g.className,
+    branch:    g.branch,
+    semester:  g.semester,
+    type:      g.type,
+    courses:   Array.from(g.courseMap.entries()).map(([courseId, tids]) => ({
+      courseId,
+      teacherIds: Array.from(tids),
+    })),
+    isSaved: false,
+  }));
+}
+
 /**
  * CurriculumFilling Component
  * Extracts curriculum data from timetables and allows editing/saving
@@ -54,9 +112,8 @@ const CurriculumFilling = () => {
         allSchedules.push(...schedules);
       }
 
-      // Extract curriculum data from schedules
-      const extractedClasses =
-        curriculumService.extractCurriculumFromSchedules(allSchedules);
+      // Extract curriculum data from schedules (inline — no service dep)
+      const extractedClasses = extractCurriculumFromSchedules(allSchedules);
 
       console.log("Total classes after extraction:", extractedClasses.length);
       console.log("Classes:", extractedClasses.map(c => `${c.className}_${c.branch}_${c.semester}_${c.type}`));
@@ -69,7 +126,7 @@ const CurriculumFilling = () => {
 
       // Add saved status to each class
       extractedClasses.forEach((classData) => {
-        const curriculumId = curriculumService.generateCurriculumId({
+        const curriculumId = generateCurriculumId({
           className: classData.className,
           branch: classData.branch,
           semester: classData.semester,
@@ -99,7 +156,12 @@ const CurriculumFilling = () => {
     setSavingStates((prev) => ({ ...prev, [classKey]: true }));
 
     try {
-      await curriculumService.saveCurriculum(curriculumData);
+      const id = generateCurriculumId({ className, branch, semester, type });
+      await curriculumService.saveCurriculum(
+        id,
+        curriculumData.courses || [],
+        { className, branch, semester, type }
+      );
 
       // Update saved status in local state
       setClasses((prev) =>
@@ -139,13 +201,17 @@ const CurriculumFilling = () => {
 
       for (const classData of unsavedClasses) {
         try {
-          await curriculumService.saveCurriculum({
+          const id = generateCurriculumId({
             className: classData.className,
             branch: classData.branch,
             semester: classData.semester,
             type: classData.type,
-            courses: classData.courses,
           });
+          await curriculumService.saveCurriculum(
+            id,
+            classData.courses,
+            { className: classData.className, branch: classData.branch, semester: classData.semester, type: classData.type }
+          );
 
           // Update saved status in local state
           setClasses((prev) =>

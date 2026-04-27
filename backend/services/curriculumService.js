@@ -1,36 +1,24 @@
 /**
- * Curriculum service — reads the "curriculums" Firestore collection.
+ * Curriculum service — MongoDB
  */
+import Curriculum from '../models/Curriculum.js';
 
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
-import { db } from "../config/firebase.js";
-
-const curriculumsCol = collection(db, "curriculums");
-
-/**
- * Fetch all curriculums (one-shot).
- */
 export async function getAllCurriculums() {
-  const snap = await getDocs(curriculumsCol);
-  return snap.docs.map((d) => d.data());
+  return await Curriculum.find({}).lean();
+}
+
+export async function getCurriculumById(id) {
+  return await Curriculum.findById(id).lean();
 }
 
 /**
- * Fetch a specific curriculum by its ID.
- */
-export async function getCurriculumById(curriculumId) {
-  const snap = await getDoc(doc(curriculumsCol, curriculumId));
-  return snap.exists() ? snap.data() : null;
-}
-
-/**
- * Find curriculum matching a timetable's metadata.
+ * Find curriculum matching timetable metadata.
  */
 export function findCurriculumForMeta(curriculums, meta) {
-  const norm = (v) => String(v ?? "").trim().toLowerCase();
+  const norm = (v) => String(v ?? '').trim().toLowerCase();
   return curriculums.find(
     (c) =>
-      norm(c.class) === norm(meta.class) &&
+      norm(c.class || c.className) === norm(meta.class) &&
       norm(c.branch) === norm(meta.branch) &&
       norm(c.semester) === norm(meta.semester) &&
       norm(c.type) === norm(meta.type)

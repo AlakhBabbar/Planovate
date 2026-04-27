@@ -379,6 +379,10 @@ const TimetableCell = ({
   allCoursesRaw,
   allTeachersRaw,
   isFromTemp = false, // cell was loaded from tempSchedules → show yellow highlight
+  suggestions = [],    // WS suggestions for this cell
+  isSuggestionFocused = false, // user dwelled 2.5s → show full suggestions
+  onCellFocus,         // (row, col) => void
+  onCellBlur,          // () => void
 }) => {
   const key = `${rowIndex}-${colIndex}`;
   const batchCount = batches[key] || 1;
@@ -881,6 +885,8 @@ const TimetableCell = ({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onMouseEnter={() => onCellFocus?.(rowIndex, colIndex)}
+      onMouseLeave={() => onCellBlur?.()}
     >
       {/* Drag Indicator - Top Left */}
       <div className="absolute top-1 left-1 z-10">
@@ -1150,6 +1156,60 @@ const TimetableCell = ({
           );
         })}
       </div>
+
+      {/* ── Ghost suggestion overlay (purple) ───────────────────── */}
+      {suggestions.length > 0 && !isFilled && (
+        <div
+          className={`mt-1 rounded border transition-all ${
+            isSuggestionFocused
+              ? 'border-purple-400 bg-purple-50 shadow-sm shadow-purple-100'
+              : 'border-purple-200 bg-purple-50/60'
+          }`}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-1 px-1.5 pt-1 pb-0.5">
+            <span className="text-[9px] font-semibold text-purple-500 uppercase tracking-wide">
+              ✦ Suggestion
+            </span>
+          </div>
+
+          {/* Top suggestion always visible */}
+          {suggestions.slice(0, isSuggestionFocused ? suggestions.length : 1).map((s, i) => (
+            <div
+              key={i}
+              className={`px-1.5 py-0.5 cursor-pointer group/sug transition-colors ${
+                i > 0 ? 'border-t border-purple-100' : ''
+              } hover:bg-purple-100 rounded`}
+              title={s.reason}
+              onClick={(e) => {
+                e.stopPropagation();
+                // Apply suggestion: fill batchIndex 0 with IDs + display names
+                onUpdateBatch(rowIndex, colIndex, 0, 'course',    s.courseCode  || s.courseName || '');
+                onUpdateBatch(rowIndex, colIndex, 0, 'courseId',  s.courseId    || '');
+                onUpdateBatch(rowIndex, colIndex, 0, 'teacher',   s.teacherName || '');
+                onUpdateBatch(rowIndex, colIndex, 0, 'teacherId', s.teacherId   || '');
+                onUpdateBatch(rowIndex, colIndex, 0, 'room',      s.roomName    || '');
+                onUpdateBatch(rowIndex, colIndex, 0, 'roomId',    s.roomId      || '');
+                if (s.suggestBatchSplit) {
+                  onCreateBatch(rowIndex, colIndex);
+                }
+              }}
+            >
+              <p className="text-[10px] font-medium text-purple-700 truncate">
+                {s.courseCode || s.courseName}
+              </p>
+              <p className="text-[9px] text-purple-500 truncate">{s.teacherName}</p>
+              <p className="text-[9px] text-purple-400 truncate">{s.roomName}</p>
+              {i === 0 && !isSuggestionFocused && suggestions.length > 1 && (
+                <p className="text-[8px] text-purple-300 mt-0.5">+{suggestions.length - 1} more (hover 2s)</p>
+              )}
+              {s.reason && isSuggestionFocused && (
+                <p className="text-[8px] text-purple-300 mt-0.5 leading-tight line-clamp-2">{s.reason}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </td>
   );
 };

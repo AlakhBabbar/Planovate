@@ -5,7 +5,8 @@ export const getAll = async (query = {}) => {
 };
 
 export const getById = async (id) => {
-  return await Model.findOne({ unid: isNaN(Number(id)) ? id : Number(id) });
+  // Curriculum primary key is curriculumId (string), not unid
+  return await Model.findOne({ curriculumId: id });
 };
 
 export const create = async (data) => {
@@ -14,9 +15,14 @@ export const create = async (data) => {
 };
 
 export const update = async (id, data) => {
-  return await Model.findOneAndUpdate({ unid: isNaN(Number(id)) ? id : Number(id) }, data, { returnDocument: 'after', upsert: true });
+  // Upsert by curriculumId — create if not exists, update if exists
+  return await Model.findOneAndUpdate(
+    { curriculumId: id },
+    { $set: data },
+    { returnDocument: 'after', upsert: true, new: true }
+  );
 };
 
 export const remove = async (id) => {
-  return await Model.findOneAndDelete({ unid: isNaN(Number(id)) ? id : Number(id) });
+  return await Model.findOneAndDelete({ curriculumId: id });
 };

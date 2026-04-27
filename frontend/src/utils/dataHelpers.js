@@ -13,7 +13,7 @@ export const normalize = (value) =>
     .replace(/\s+/g, " ");
 
 /**
- * Creates a safe ID from a value for use in Firestore document IDs
+ * Creates a safe ID from a value for use in MongoDB document IDs
  */
 export const safeId = (value) =>
   normalize(value)

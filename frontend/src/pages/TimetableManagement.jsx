@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from "react";
-import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2, Lock, Loader2 } from "lucide-react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import { AlertCircle, CheckCircle, Users, Building2, BookOpen, FolderSearch, Save, Download, Plus, X, Maximize2, Minimize2, Lock, Loader2, Wifi, WifiOff, Sparkles } from "lucide-react";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import TimetableTable from "../components/timetableManagment/TimetableTable";
@@ -24,6 +24,7 @@ import { resolveBatchDataForDisplay, convertDisplayToIds } from "../utils/idDisp
 import { validateAllBatchData, hasValidationErrors, getValidationSummary } from "../utils/validationHelpers";
 import { buildScheduleOccurrences, generateTimetableId } from "../utils/timetableHelpers";
 import { normalize, safeId } from "../utils/dataHelpers";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 // Generate unique table ID for internal use
 const generateUniqueTableId = () => `table_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -87,6 +88,19 @@ const Timetable = () => {
   const tabMetadataRef = useRef(tabMetadata);
   useEffect(() => { tabMetadataRef.current = tabMetadata; }, [tabMetadata]);
 
+  // ── WebSocket connection (compute engine for suggestions) ──────────────────
+  const {
+    wsStatus,
+    computing: wsComputing,
+    suggestions: wsSuggestions,
+    cellSuggestions: wsCellSuggestions,
+    openTimetable: wsOpenTimetable,
+    closeTimetable: wsCloseTimetable,
+    cursorMove: wsCursorMove,
+    cellFocus: wsCellFocus,
+    cellBlur: wsCellBlur,
+  } = useWebSocket();
+
   // Refs for keyboard navigation
   const semesterInputRef = useRef(null);
   const typeInputRef = useRef(null);
@@ -147,9 +161,11 @@ const Timetable = () => {
       const temp = tempMap.get(k);
 
       if (perm && temp) {
-        const permTs = perm.updatedAt?.toMillis?.() ?? 0;
-        const tempTs = temp.updatedAt?.toMillis?.() ?? 0;
-        if (tempTs > permTs) {
+        // MongoDB returns plain JS Date — use getTime(), not Firebase's .toMillis()
+        const permTs = perm.updatedAt ? new Date(perm.updatedAt).getTime() : 0;
+        const tempTs = temp.updatedAt ? new Date(temp.updatedAt).getTime() : 0;
+        // Prefer temp if it is newer OR same age (temp = in-progress work)
+        if (tempTs >= permTs) {
           merged.push(temp);
           newTempCells.add(`${temp.rowIndex}-${temp.colIndex}`);
         } else {
@@ -168,14 +184,25 @@ const Timetable = () => {
     }
 
     const { batchesByTable, batchDataByTable } = reconstructTimetableFromSchedules(merged);
-    const tableName = Object.keys(batchesByTable)[0] || "Table 1";
-    const rawBatchData = batchDataByTable[tableName] || {};
-    const resolvedBatchData = await resolveBatchDataForDisplay(rawBatchData);
-    const resolvedBatches = batchesByTable[tableName] || {};
+
+    // Merge ALL table groups together (temp and perm may have different tableIds due to the
+    // generateTableName bug, so we combine everything into one view)
+    const combinedBatchData = {};
+    const combinedBatches = {};
+    for (const tableData of Object.values(batchDataByTable)) {
+      Object.assign(combinedBatchData, tableData);
+    }
+    for (const tableData of Object.values(batchesByTable)) {
+      for (const [cellKey, count] of Object.entries(tableData)) {
+        combinedBatches[cellKey] = Math.max(combinedBatches[cellKey] || 0, count);
+      }
+    }
+
+    const resolvedBatchData = await resolveBatchDataForDisplay(combinedBatchData);
 
     return {
       resolvedBatchData,
-      resolvedBatches,
+      resolvedBatches: combinedBatches,
       newTempCells,
       hasTempData: newTempCells.size > 0,
     };
@@ -296,7 +323,8 @@ const Timetable = () => {
         if (cancelled) return;
 
         // Load data into the ACTIVE tab only
-        setTimeSlots(existingTimetable.timeSlots || DEFAULT_TIME_SLOTS);
+        const loadedTimeSlots = existingTimetable.timeSlots || DEFAULT_TIME_SLOTS;
+        setTimeSlots(loadedTimeSlots);
         setBatches(prev => ({ ...prev, [activeTable]: resolvedBatches }));
         setBatchData(prev => ({ ...prev, [activeTable]: resolvedBatchData }));
         setTempCells(newTempCells);
@@ -310,6 +338,14 @@ const Timetable = () => {
 
         // Mark this metadata as loaded
         loadedMetadataRef.current[metaKey] = true;
+
+        // → Open WebSocket session for compute engine suggestions
+        wsOpenTimetable(
+          ttId,
+          { class: currentMeta.className, branch: currentMeta.branch, semester: currentMeta.semester, type: currentMeta.type },
+          ["mon", "tue", "wed", "thu", "fri", "sat"],
+          loadedTimeSlots
+        );
       }
       
       setIsLoadingExisting(false);
@@ -341,7 +377,8 @@ const Timetable = () => {
         const tableName   = generateTableName(activeTable, tables);
 
         // Build minimal occurrences list — only the changed cells
-        const convertedChanges = await convertDisplayToIds(changes);
+        // We keep display names for temp schedules so work isn't lost if IDs aren't resolved yet
+        const convertedChanges = await convertDisplayToIds(changes, true);
         const occurrences = [];
         const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -364,6 +401,10 @@ const Timetable = () => {
             courseId: cellData.courseId || "",
             teacherId: cellData.teacherId || "",
             roomId: cellData.roomId || "",
+            // Fallbacks for display names (important for temp storage)
+            course: cellData.course || "",
+            teacher: cellData.teacher || "",
+            room: cellData.room || "",
           });
         }
 
@@ -394,7 +435,7 @@ const Timetable = () => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        saveToFirestore();
+        saveTimetableData();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -451,9 +492,10 @@ const Timetable = () => {
   const handleDiscardTemp = async () => {
     const timetableId = tabMetadata[activeTable]?.timetableId;
     if (!timetableId) return;
+    if (!window.confirm("Discard all unsaved changes from the previous session?")) return;
     try {
       await tempScheduleService.deleteTempSchedulesByTimetableId(timetableId);
-      // Reload from permanent schedules only
+      // Reload from permanent schedules only (temp is now deleted so merge returns perm-only)
       const { resolvedBatchData, resolvedBatches } = await loadAndMergeSchedules(timetableId);
       setBatches(prev => ({ ...prev, [activeTable]: resolvedBatches }));
       setBatchData(prev => ({ ...prev, [activeTable]: resolvedBatchData }));
@@ -462,6 +504,39 @@ const Timetable = () => {
       syncRecentChanges({});
     } catch (err) {
       console.error("[discard] error:", err);
+    }
+  };
+
+  // Promote temp schedules → permanent schedules (called from "Save Now" banner)
+  const handleSaveFromTemp = async () => {
+    const timetableId = tabMetadata[activeTable]?.timetableId;
+    const currentMeta = tabMetadata[activeTable];
+    if (!timetableId || !currentMeta) {
+      alert("No timetable loaded. Fill in the fields and save first.");
+      return;
+    }
+    try {
+      // Fetch raw temp docs directly from API (source of truth)
+      const tempDocs = await tempScheduleService.getTempSchedulesByTimetableId(timetableId);
+      if (!tempDocs || tempDocs.length === 0) {
+        setHasUnsavedFromTemp(false);
+        return;
+      }
+
+      // Overwrite permanent schedules with temp data
+      // saveSchedules does: delete all existing for timetableId, then insert new ones
+      await scheduleService.saveSchedules({ timetableId, schedules: tempDocs });
+
+      // Clear temp
+      await tempScheduleService.deleteTempSchedulesByTimetableId(timetableId);
+
+      setTempCells(new Set());
+      setHasUnsavedFromTemp(false);
+      syncRecentChanges({});
+      alert("✅ Changes saved permanently!");
+    } catch (err) {
+      console.error("[save-from-temp] error:", err);
+      alert("Failed to save. Check console.");
     }
   };
 
@@ -698,7 +773,7 @@ const Timetable = () => {
     setTimeSlots([...timeSlots, newSlot]);
   };
 
-  const saveToFirestore = async () => {
+  const saveTimetableData = async () => {
     const currentMeta = tabMetadata[activeTable];
     if (!currentMeta?.className?.trim() || !currentMeta?.branch?.trim() || !currentMeta?.semester?.trim() || !currentMeta?.type?.trim()) {
       alert("Please fill in Class, Branch, Semester, and Type fields");
@@ -792,6 +867,23 @@ const Timetable = () => {
         batchesByTable,
         batchDataByTable,
       });
+
+      // Generate individual schedule entries and save them permanently
+      const occurrences = buildScheduleOccurrences({
+        timetableId: id,
+        meta: {
+          class: currentMeta.className,
+          branch: currentMeta.branch,
+          semester: currentMeta.semester,
+          type: currentMeta.type,
+        },
+        tables: [tableName],
+        days: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        timeSlots,
+        batchesByTable,
+        batchDataByTable,
+      });
+      await scheduleService.saveSchedules({ timetableId: id, schedules: occurrences });
 
       // After permanent save, clear temp entries and local unsaved state
       await tempScheduleService.deleteTempSchedulesByTimetableId(id).catch(() => {});
@@ -983,9 +1075,29 @@ const Timetable = () => {
                 )}
               </span>
             )}
+            {/* WS compute engine status */}
+            <span className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-all ${
+              wsStatus === "connected"
+                ? wsComputing
+                  ? "text-purple-700 bg-purple-50 border-purple-200"
+                  : "text-purple-600 bg-purple-50 border-purple-200"
+                : wsStatus === "connecting"
+                ? "text-gray-500 bg-gray-50 border-gray-200"
+                : "text-gray-400 bg-gray-50 border-gray-200"
+            }`} title={`Compute engine: ${wsStatus}`}>
+              {wsStatus === "connected" ? (
+                wsComputing
+                  ? <><Loader2 size={12} className="animate-spin" /> Computing...</>
+                  : <><Sparkles size={12} /> AI Suggestions</>
+              ) : wsStatus === "connecting" ? (
+                <><Loader2 size={12} className="animate-spin" /> Connecting...</>
+              ) : (
+                <><WifiOff size={12} /> Offline</>
+              )}
+            </span>
             <button
               className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium flex items-center gap-2"
-              onClick={saveToFirestore}
+              onClick={saveTimetableData}
               type="button"
               title="Save (Ctrl+S)"
             >
@@ -1012,7 +1124,7 @@ const Timetable = () => {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={saveToFirestore}
+                onClick={handleSaveFromTemp}
                 className="px-3 py-1 text-xs bg-amber-600 text-white rounded hover:bg-amber-700 transition-colors font-medium"
               >
                 Save Now
@@ -1079,6 +1191,10 @@ const Timetable = () => {
             allCoursesRaw={allCoursesRaw}
             allTeachersRaw={allTeachersRaw}
             tempCells={tempCells}
+            wsSuggestions={wsSuggestions}
+            wsCellSuggestions={wsCellSuggestions}
+            onCellFocus={wsCellFocus}
+            onCellBlur={wsCellBlur}
           />
           {!isMetadataComplete && (
             <div className="absolute inset-0 bg-white/80 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg z-10 pointer-events-all">

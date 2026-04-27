@@ -5,7 +5,7 @@ export const getAll = async (query = {}) => {
 };
 
 export const getById = async (id) => {
-  return await Model.findOne({ unid: isNaN(Number(id)) ? id : Number(id) });
+  return await Model.findOne({ _docId: id });
 };
 
 export const create = async (data) => {
@@ -14,9 +14,9 @@ export const create = async (data) => {
 };
 
 export const update = async (id, data) => {
-  return await Model.findOneAndUpdate({ unid: isNaN(Number(id)) ? id : Number(id) }, data, { returnDocument: 'after', upsert: true });
+  return await Model.findOneAndUpdate({ _docId: id }, { ...data, _docId: id }, { returnDocument: 'after', upsert: true });
 };
 
 export const remove = async (id) => {
-  return await Model.findOneAndDelete({ unid: isNaN(Number(id)) ? id : Number(id) });
+  return await Model.findOneAndDelete({ _docId: id });
 };

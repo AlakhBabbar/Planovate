@@ -1,19 +1,9 @@
 /**
- * Teacher service — reads the "teachers" Firestore collection.
+ * Teacher service — MongoDB
  */
+import Teacher from '../models/Teacher.js';
 
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../config/firebase.js";
-
-const teachersCol = collection(db, "teachers");
-
-/**
- * Fetch all teachers (one-shot).
- */
 export async function getAllTeachers() {
-  const snap = await getDocs(teachersCol);
-  return snap.docs.map((d) => ({
-    ...d.data(),
-    unid: Number(d.id) || d.data().unid,
-  }));
+  const docs = await Teacher.find({}).lean();
+  return docs.map(d => ({ ...d, unid: d.unid ?? d._id?.toString() }));
 }

@@ -1,84 +1,71 @@
 /**
- * Schedule service — queries the "schedules" Firestore collection.
- * Provides both one-shot fetches and live onSnapshot listeners.
+ * Schedule service — MongoDB with polling-based "live" watchers.
+ * Since MongoDB has no built-in onSnapshot, we poll every POLL_INTERVAL ms.
  */
+import Schedule from '../models/Schedule.js';
+import TempSchedule from '../models/TempSchedule.js';
 
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  onSnapshot,
-} from "firebase/firestore";
-import { db } from "../config/firebase.js";
+const POLL_INTERVAL = 4000; // 4 seconds
 
-const schedulesCol = collection(db, "schedules");
-
-/**
- * Fetch all schedules for a specific timetable (one-shot).
- */
 export async function getSchedulesByTimetableId(timetableId) {
   if (!timetableId) return [];
-  const snap = await getDocs(
-    query(schedulesCol, where("timetableId", "==", String(timetableId)))
-  );
-  return snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
+  return await Schedule.find({ timetableId: String(timetableId) }).lean();
 }
 
-/**
- * Fetch ALL schedules across every timetable (one-shot).
- */
+export async function getTempSchedulesByTimetableId(timetableId) {
+  if (!timetableId) return [];
+  return await TempSchedule.find({ timetableId: String(timetableId) }).lean();
+}
+
 export async function getAllSchedules() {
-  const snap = await getDocs(schedulesCol);
-  return snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
+  return await Schedule.find({}).lean();
 }
 
 /**
- * Live listener for schedules of ONE timetable.
- * Returns an unsubscribe function.
- *
- * @param {string} timetableId
- * @param {(schedules: Array) => void} onData  - called on every change
- * @param {(err: Error) => void} onError
- * @returns {() => void} unsubscribe
+ * Poll schedules for ONE timetable.
+ * Returns a stop() function to cancel.
  */
 export function watchSchedulesByTimetableId(timetableId, onData, onError) {
-  const q = query(
-    schedulesCol,
-    where("timetableId", "==", String(timetableId))
-  );
-  return onSnapshot(
-    q,
-    (snap) => {
-      const schedules = snap.docs.map((d) => ({ _docId: d.id, ...d.data() }));
+  let stopped = false;
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const schedules = await getSchedulesByTimetableId(timetableId);
       onData(schedules);
-    },
-    (err) => {
-      console.error(`[scheduleService] snapshot error for ${timetableId}:`, err);
+    } catch (err) {
+      console.error('[scheduleService] poll error:', err);
       if (onError) onError(err);
     }
-  );
+    if (!stopped) setTimeout(poll, POLL_INTERVAL);
+  }
+
+  // Initial fetch immediately
+  poll();
+
+  return () => { stopped = true; };
 }
 
 /**
- * Live listener for ALL schedules EXCEPT a given timetableId.
- * Since Firestore client SDK doesn't support "!=" with onSnapshot efficiently,
- * we listen to the entire collection and filter in memory.
- *
- * Returns an unsubscribe function.
+ * Poll ALL schedules except a given timetableId.
+ * Returns a stop() function to cancel.
  */
 export function watchAllOtherSchedules(excludeTimetableId, onData, onError) {
-  return onSnapshot(
-    schedulesCol,
-    (snap) => {
-      const schedules = snap.docs
-        .map((d) => ({ _docId: d.id, ...d.data() }))
-        .filter((s) => s.timetableId !== excludeTimetableId);
-      onData(schedules);
-    },
-    (err) => {
-      console.error("[scheduleService] snapshot error (all others):", err);
+  let stopped = false;
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const all = await Schedule.find({ timetableId: { $ne: String(excludeTimetableId) } }).lean();
+      onData(all);
+    } catch (err) {
+      console.error('[scheduleService] poll error (others):', err);
       if (onError) onError(err);
     }
-  );
+    if (!stopped) setTimeout(poll, POLL_INTERVAL);
+  }
+
+  poll();
+
+  return () => { stopped = true; };
 }

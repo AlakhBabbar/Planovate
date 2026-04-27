@@ -27,16 +27,14 @@ import scheduleRoutes from "./routes/scheduleRoutes.js";
 import tempScheduleRoutes from "./routes/tempscheduleRoutes.js";
 import settingRoutes from "./routes/settingRoutes.js";
 
-// Initialize Firebase (side-effect: connects to Firestore - keeping for fallback)
-import "./config/firebase.js";
+
 
 // ── Express ──────────────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Legacy Firebase API routes (used by compute engine initially)
-app.use("/api/firebase", apiRoutes);
+
 
 // MongoDB REST API Routes
 app.use("/api/courses", courseRoutes);

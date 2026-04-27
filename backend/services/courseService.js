@@ -1,20 +1,9 @@
 /**
- * Course service — reads the "courses" Firestore collection.
+ * Course service — reads the "courses" MongoDB collection.
  */
+import Course from '../models/Course.js';
 
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../config/firebase.js";
-
-const coursesCol = collection(db, "courses");
-
-/**
- * Fetch all courses (one-shot).
- * Returns array with unid attached.
- */
 export async function getAllCourses() {
-  const snap = await getDocs(coursesCol);
-  return snap.docs.map((d) => ({
-    ...d.data(),
-    unid: Number(d.id) || d.data().unid,
-  }));
+  const docs = await Course.find({}).lean();
+  return docs.map(d => ({ ...d, unid: d.unid ?? d._id?.toString() }));
 }

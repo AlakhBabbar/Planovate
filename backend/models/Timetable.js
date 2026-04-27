@@ -8,7 +8,10 @@ const timetableSchema = new mongoose.Schema({
   semester: { type: String },
   type: { type: String },
   days: [{ type: String }],
-  timeSlots: [{ type: String }]
+  timeSlots: [{ type: String }],
+  tables: [{ type: String }],
+  batchesByTable: { type: mongoose.Schema.Types.Mixed },
+  batchDataByTable: { type: mongoose.Schema.Types.Mixed }
 }, { timestamps: true });
 
 export default mongoose.model('Timetable', timetableSchema);

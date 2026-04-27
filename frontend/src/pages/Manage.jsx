@@ -5,7 +5,6 @@ import Footer from "../components/Footer";
 import { timetableService, settingsService, curriculumService, scheduleService, courseService } from "../api";
 import { backupCompleteDatabase, getBackupSummary, restoreFromBackup } from "../utils/databaseBackup";
 import CurriculumFilling from "./CurriculumFilling";
-import { doc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
 
 
 const Manage = () => {
@@ -154,33 +153,32 @@ const Manage = () => {
     try {
       setUpdating(timetable.timetableId);
 
-      // Update timetable document
-      const timetableRef = doc(db, "timetables", timetable.timetableId);
-      await updateDoc(timetableRef, {
-        class: fields.updatedClass,
-        branch: fields.updatedBranch,
-        totalLectureHours: Number(fields.totalLectureHours) || 0,
+      // Update timetable via REST API
+      await timetableService.saveTimetable({
+        meta: {
+          class: fields.updatedClass,
+          branch: fields.updatedBranch,
+          semester: timetable.semester,
+          type: timetable.type,
+        },
+        tables: timetable.tables || [],
+        days: timetable.days || [],
+        timeSlots: timetable.timeSlots || [],
+        batchesByTable: timetable.batchesByTable || {},
+        batchDataByTable: timetable.batchDataByTable || {},
       });
 
       // Update all schedules for this timetable
-      const schedulesQuery = query(
-        collection(db, "schedules"),
-        where("timetableId", "==", timetable.timetableId)
-      );
-      const schedulesSnapshot = await getDocs(schedulesQuery);
-      
-      const scheduleUpdates = [];
-      schedulesSnapshot.forEach((doc) => {
-        scheduleUpdates.push(
-          updateDoc(doc.ref, {
+      const schedules = await scheduleService.getSchedulesByTimetableId(timetable.timetableId);
+      if (schedules && schedules.length > 0) {
+        await scheduleService.saveSchedules({
+          timetableId: timetable.timetableId,
+          schedules: schedules.map(s => ({
+            ...s,
             class: fields.updatedClass,
-            branch: fields.updatedBranch
-          })
-        );
-      });
-      
-      if (scheduleUpdates.length > 0) {
-        await Promise.all(scheduleUpdates);
+            branch: fields.updatedBranch,
+          })),
+        });
       }
 
       // Update curriculum if exists
@@ -202,7 +200,6 @@ const Manage = () => {
         try {
           const oldCurriculum = await curriculumService.getCurriculum(oldCurriculumId);
           if (oldCurriculum) {
-            // Save with new ID
             await curriculumService.saveCurriculum({
               className: fields.updatedClass,
               branch: fields.updatedBranch,
@@ -210,20 +207,21 @@ const Manage = () => {
               type: timetable.type,
               courses: oldCurriculum.courses
             });
-            // Delete old curriculum
             await curriculumService.deleteCurriculum(oldCurriculumId);
           }
         } catch (error) {
           console.log("No curriculum to update or error updating:", error);
         }
       } else {
-        // Just update the existing curriculum
-        const curriculumRef = doc(db, "curriculums", oldCurriculumId);
         try {
-          await updateDoc(curriculumRef, {
-            class: fields.updatedClass,
-            branch: fields.updatedBranch
-          });
+          const existing = await curriculumService.getCurriculum(oldCurriculumId);
+          if (existing) {
+            await curriculumService.saveCurriculum({
+              ...existing,
+              class: fields.updatedClass,
+              branch: fields.updatedBranch
+            });
+          }
         } catch (error) {
           console.log("Curriculum doesn't exist, skipping");
         }
@@ -267,32 +265,32 @@ const Manage = () => {
         try {
           const fields = updateFields[timetable.timetableId];
 
-          // Update timetable document
-          const timetableRef = doc(db, "timetables", timetable.timetableId);
-          await updateDoc(timetableRef, {
-            class: fields.updatedClass,
-            branch: fields.updatedBranch
+          // Update timetable via REST API
+          await timetableService.saveTimetable({
+            meta: {
+              class: fields.updatedClass,
+              branch: fields.updatedBranch,
+              semester: timetable.semester,
+              type: timetable.type,
+            },
+            tables: timetable.tables || [],
+            days: timetable.days || [],
+            timeSlots: timetable.timeSlots || [],
+            batchesByTable: timetable.batchesByTable || {},
+            batchDataByTable: timetable.batchDataByTable || {},
           });
 
           // Update all schedules for this timetable
-          const schedulesQuery = query(
-            collection(db, "schedules"),
-            where("timetableId", "==", timetable.timetableId)
-          );
-          const schedulesSnapshot = await getDocs(schedulesQuery);
-          
-          const scheduleUpdates = [];
-          schedulesSnapshot.forEach((doc) => {
-            scheduleUpdates.push(
-              updateDoc(doc.ref, {
+          const schedules = await scheduleService.getSchedulesByTimetableId(timetable.timetableId);
+          if (schedules && schedules.length > 0) {
+            await scheduleService.saveSchedules({
+              timetableId: timetable.timetableId,
+              schedules: schedules.map(s => ({
+                ...s,
                 class: fields.updatedClass,
-                branch: fields.updatedBranch
-              })
-            );
-          });
-          
-          if (scheduleUpdates.length > 0) {
-            await Promise.all(scheduleUpdates);
+                branch: fields.updatedBranch,
+              })),
+            });
           }
 
           // Update curriculum if exists
@@ -327,12 +325,15 @@ const Manage = () => {
               console.log("No curriculum to update or error updating:", error);
             }
           } else {
-            const curriculumRef = doc(db, "curriculums", oldCurriculumId);
             try {
-              await updateDoc(curriculumRef, {
-                class: fields.updatedClass,
-                branch: fields.updatedBranch
-              });
+              const existing = await curriculumService.getCurriculum(oldCurriculumId);
+              if (existing) {
+                await curriculumService.saveCurriculum({
+                  ...existing,
+                  class: fields.updatedClass,
+                  branch: fields.updatedBranch
+                });
+              }
             } catch (error) {
               console.log("Curriculum doesn't exist, skipping");
             }
@@ -640,13 +641,13 @@ const Manage = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {timetables.map((timetable) => {
+                  {timetables.map((timetable, idx) => {
                     const fields = updateFields[timetable.timetableId] || {};
                     const availableBranches = getAvailableBranches(fields.updatedClass);
                     
                     return (
                     <tr 
-                      key={timetable.timetableId} 
+                      key={timetable.timetableId || timetable._id || idx} 
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-4 py-4 text-sm font-medium text-gray-900">

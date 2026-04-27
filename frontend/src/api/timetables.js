@@ -11,17 +11,31 @@ export async function saveTimetable(timetableData) {
     type: timetableData.meta.type,
     days: timetableData.days || [],
     timeSlots: timetableData.timeSlots || [],
+    tables: timetableData.tables || [],
+    batchesByTable: timetableData.batchesByTable || {},
+    batchDataByTable: timetableData.batchDataByTable || {},
   };
   await apiFetch(`/timetables/${unid}`, { method: 'PUT', body: JSON.stringify(payload) });
   return unid;
 }
 
 export async function getTimetable(unid) {
-  return await apiFetch(`/timetables/${unid}`);
+  try {
+    return await apiFetch(`/timetables/${unid}`);
+  } catch (err) {
+    if (err.message.includes('404')) return null;
+    throw err;
+  }
 }
 
 export async function loadTimetable(unid) {
-  const data = await apiFetch(`/timetables/${unid}`);
+  let data;
+  try {
+    data = await apiFetch(`/timetables/${unid}`);
+  } catch (err) {
+    if (err.message.includes('404')) return null;
+    throw err;
+  }
   if (!data) return null;
   
   return {

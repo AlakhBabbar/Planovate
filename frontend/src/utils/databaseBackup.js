@@ -1,6 +1,6 @@
 /**
  * Database Backup Utility
- * Downloads all Firestore collections as separate JSON files
+ * Downloads all MongoDB collections as separate JSON files
  * Excludes auto-generated fields except unique IDs
  */
 
@@ -77,7 +77,7 @@ export async function backupCompleteDatabase() {
   };
 
   try {
-    // Fetch all collections directly from Firestore
+    // Fetch all collections from MongoDB via REST API
     const collections = [
       'teachers',
       'courses',

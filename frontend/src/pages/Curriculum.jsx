@@ -3,7 +3,6 @@ import { Plus, X, List, Grid, Save, Trash2, Search, BookOpen, Users } from "luci
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { courseService, teacherService, curriculumService } from "../api";
-import { collection, doc, setDoc, getDocs, deleteDoc } from "firebase/firestore";
 
 
 const Curriculum = () => {
@@ -119,7 +118,11 @@ const Curriculum = () => {
         updatedAt: new Date().toISOString()
       };
 
-      await apiFetch(`/curriculums/${curriculumId}`, { method: 'PUT', body: JSON.stringify(curriculumData) });
+      await curriculumService.saveCurriculum(
+        curriculumId,
+        courses,
+        { className, branch, semester, type }
+      );
       
       setIsCreating(false);
       setNewCurriculum({

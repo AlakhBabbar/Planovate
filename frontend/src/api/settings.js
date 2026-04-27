@@ -1,8 +1,13 @@
 import { apiFetch } from "./apiClient";
 
 export async function getPrograms() {
-  const res = await apiFetch(`/settings/programs`);
-  return res && res.list ? res.list : [];
+  try {
+    const res = await apiFetch(`/settings/programs`);
+    return res && res.list ? res.list : [];
+  } catch (err) {
+    if (err.message.includes('404')) return [];
+    throw err;
+  }
 }
 
 export async function savePrograms(programs) {
@@ -10,8 +15,13 @@ export async function savePrograms(programs) {
 }
 
 export async function getBranches() {
-  const res = await apiFetch(`/settings/branches`);
-  return res && res.list ? res.list : [];
+  try {
+    const res = await apiFetch(`/settings/branches`);
+    return res && res.list ? res.list : [];
+  } catch (err) {
+    if (err.message.includes('404')) return [];
+    throw err;
+  }
 }
 
 export async function saveBranches(branches) {

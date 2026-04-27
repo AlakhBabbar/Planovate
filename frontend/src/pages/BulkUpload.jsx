@@ -3,7 +3,6 @@ import { Upload, Download, CheckCircle, XCircle, AlertCircle } from "lucide-reac
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { courseService, roomService, teacherService } from "../api";
-import { collection, query, where, getDocs } from "firebase/firestore";
 
 
 const BulkUpload = () => {
@@ -16,40 +15,30 @@ const BulkUpload = () => {
 
   // Check for duplicate teacher with name comparison
   const checkTeacherConflict = async (teacherID, teacherName) => {
-    const q = query(collection(db, "teachers"), where("ID", "==", teacherID));
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) {
-      return { exists: false };
-    }
-    
-    const existingTeacher = snapshot.docs[0].data();
-    const isSameName = normalize(existingTeacher.name) === normalize(teacherName);
-    
+    const allTeachers = await teacherService.listTeachers({});
+    const existing = allTeachers.find(t => normalize(t.ID) === normalize(teacherID));
+    if (!existing) return { exists: false };
     return {
       exists: true,
-      sameName: isSameName,
-      existingName: existingTeacher.name
+      sameName: normalize(existing.name) === normalize(teacherName),
+      existingName: existing.name
     };
   };
 
   // Check for duplicates
   const checkDuplicateTeacher = async (teacherID) => {
-    const q = query(collection(db, "teachers"), where("ID", "==", teacherID));
-    const snapshot = await getDocs(q);
-    return !snapshot.empty;
+    const allTeachers = await teacherService.listTeachers({});
+    return allTeachers.some(t => normalize(t.ID) === normalize(teacherID));
   };
 
   const checkDuplicateCourse = async (courseID) => {
-    const q = query(collection(db, "courses"), where("ID", "==", courseID));
-    const snapshot = await getDocs(q);
-    return !snapshot.empty;
+    const allCourses = await courseService.listCourses({});
+    return allCourses.some(c => normalize(c.ID) === normalize(courseID));
   };
 
   const checkDuplicateRoom = async (roomID) => {
-    const q = query(collection(db, "rooms"), where("ID", "==", roomID));
-    const snapshot = await getDocs(q);
-    return !snapshot.empty;
+    const allRooms = await roomService.listRooms({});
+    return allRooms.some(r => normalize(r.ID) === normalize(roomID));
   };
 
   // Normalize string for comparison
@@ -623,7 +612,7 @@ const BulkUpload = () => {
                             
                             {isSuccess && (
                               <div className="mt-1 text-xs text-green-600">
-                                Successfully uploaded to Firestore
+                                Successfully uploaded
                               </div>
                             )}
                           </div>

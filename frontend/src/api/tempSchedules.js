@@ -1,11 +1,11 @@
 import { apiFetch, createQueryString } from "./apiClient";
 
-export async function getTempSchedules(timetableId) {
+export async function getTempSchedulesByTimetableId(timetableId) {
   const query = createQueryString({ timetableId });
   return await apiFetch(`/tempschedules${query}`);
 }
 
-export async function upsertTempSchedules({ timetableId, schedules }) {
+export async function upsertTempSchedules(timetableId, schedules) {
   // Clear first then post new
   const existing = await apiFetch(`/tempschedules?timetableId=${timetableId}`);
   await Promise.all(existing.map(s => apiFetch(`/tempschedules/${s._id}`, { method: 'DELETE' })));
@@ -16,7 +16,7 @@ export async function upsertTempSchedules({ timetableId, schedules }) {
   }));
 }
 
-export async function clearTempSchedules(timetableId) {
+export async function deleteTempSchedulesByTimetableId(timetableId) {
   const existing = await apiFetch(`/tempschedules?timetableId=${timetableId}`);
   await Promise.all(existing.map(s => apiFetch(`/tempschedules/${s._id}`, { method: 'DELETE' })));
 }

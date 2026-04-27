@@ -21,6 +21,11 @@ const TimetableTable = ({
   allCoursesRaw,
   allTeachersRaw,
   tempCells, // Set<"rowIndex-colIndex"> — cells loaded from tempSchedules
+  // WS suggestion props
+  wsSuggestions,       // Map<"row-col", suggestion[]>
+  wsCellSuggestions,   // { row, col, suggestions[] } | null — focused cell
+  onCellFocus,         // (row, col) => void
+  onCellBlur,          // () => void
 }) => {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -49,32 +54,44 @@ const TimetableTable = ({
               <td className="sticky left-0 z-10 p-3 font-medium text-gray-600 bg-gray-50 text-xs whitespace-nowrap border-r border-gray-200">
                 {slot}
               </td>
-              {days.map((_, colIndex) => (
-                <TimetableCell
-                  key={colIndex}
-                  rowIndex={rowIndex}
-                  colIndex={colIndex}
-                  batches={batches}
-                  batchData={batchData}
-                  conflicts={conflicts}
-                  validationErrors={validationErrors}
-                  courseOptions={courseOptions}
-                  teacherOptions={teacherOptions}
-                  roomOptions={roomOptions}
-                  onCreateBatch={onCreateBatch}
-                  onRemoveBatch={onRemoveBatch}
-                  onUpdateBatch={onUpdateBatch}
-                  onValidationChange={onValidationChange}
-                  isFirstCell={rowIndex === 0 && colIndex === 0}
-                  firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}
-                  onCopyCell={onCopyCell}
-                  onMoveCell={onMoveCell}
-                  curriculumData={curriculumData}
-                  allCoursesRaw={allCoursesRaw}
-                  allTeachersRaw={allTeachersRaw}
-                  isFromTemp={tempCells?.has(`${rowIndex}-${colIndex}`) ?? false}
-                />
-              ))}
+              {days.map((_, colIndex) => {
+                const cellKey = `${rowIndex}-${colIndex}`;
+                const isFocusedCell = wsCellSuggestions?.row === rowIndex && wsCellSuggestions?.col === colIndex;
+                const cellSugs = isFocusedCell
+                  ? wsCellSuggestions.suggestions
+                  : wsSuggestions?.get(cellKey) || [];
+
+                return (
+                  <TimetableCell
+                    key={colIndex}
+                    rowIndex={rowIndex}
+                    colIndex={colIndex}
+                    batches={batches}
+                    batchData={batchData}
+                    conflicts={conflicts}
+                    validationErrors={validationErrors}
+                    courseOptions={courseOptions}
+                    teacherOptions={teacherOptions}
+                    roomOptions={roomOptions}
+                    onCreateBatch={onCreateBatch}
+                    onRemoveBatch={onRemoveBatch}
+                    onUpdateBatch={onUpdateBatch}
+                    onValidationChange={onValidationChange}
+                    isFirstCell={rowIndex === 0 && colIndex === 0}
+                    firstCellRef={rowIndex === 0 && colIndex === 0 ? firstCellRef : null}
+                    onCopyCell={onCopyCell}
+                    onMoveCell={onMoveCell}
+                    curriculumData={curriculumData}
+                    allCoursesRaw={allCoursesRaw}
+                    allTeachersRaw={allTeachersRaw}
+                    isFromTemp={tempCells?.has(cellKey) ?? false}
+                    suggestions={cellSugs}
+                    isSuggestionFocused={isFocusedCell}
+                    onCellFocus={onCellFocus}
+                    onCellBlur={onCellBlur}
+                  />
+                );
+              })}
             </tr>
           ))}
         </tbody>

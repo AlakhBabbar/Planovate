@@ -12,6 +12,17 @@ router.get('/', async (req, res) => {
   }
 });
 
+
+router.get('/:id', async (req, res) => {
+  try {
+    const data = await methods.getById(req.params.id);
+    if (!data) return res.json(null);
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const data = await methods.create(req.body);
