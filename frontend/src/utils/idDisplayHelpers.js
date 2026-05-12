@@ -193,10 +193,7 @@ export async function getRoomDisplayName(roomId) {
   const room = rooms.get(String(roomId));
   
   if (room) {
-    // Return in format: RoomID Faculty (space-separated, as stored in schedules)
-    const roomDisplay = room.ID || roomId;
-    const faculty = room.faculty || "";
-    return faculty ? `${roomDisplay} ${faculty}` : roomDisplay;
+    return room.ID || roomId;
   }
   
   return roomId;

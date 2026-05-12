@@ -26,6 +26,7 @@ import timetableRoutes from "./routes/timetableRoutes.js";
 import scheduleRoutes from "./routes/scheduleRoutes.js";
 import tempScheduleRoutes from "./routes/tempscheduleRoutes.js";
 import settingRoutes from "./routes/settingRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
 
 
@@ -45,6 +46,7 @@ app.use("/api/timetables", timetableRoutes);
 app.use("/api/schedules", scheduleRoutes);
 app.use("/api/tempschedules", tempScheduleRoutes);
 app.use("/api/settings", settingRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api", apiRoutes);
 
 // ── HTTP + WebSocket ─────────────────────────────────────────────────────────

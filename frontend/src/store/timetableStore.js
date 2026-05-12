@@ -63,10 +63,14 @@ const useTimetableStore = create((set, get) => ({
 
       const roomOptions = (rooms ?? [])
         .map((r) => {
-          if (r?.ID && r?.faculty) {
-            return `${r.ID} ${r.faculty}`;
-          }
-          return r?.ID || r?.name || r?.unid || "";
+          const id = r?.ID || r?.name || r?.unid || "";
+          if (!id) return null;
+          // Build rich label for dropdown display
+          const parts = [id];
+          if (r?.faculty) parts.push(r.faculty);
+          if (r?.capacity) parts.push(`Cap: ${r.capacity}`);
+          if (r?.floor) parts.push(`Fl: ${r.floor}`);
+          return { value: id, label: parts.join(" | ") };
         })
         .filter(Boolean);
 

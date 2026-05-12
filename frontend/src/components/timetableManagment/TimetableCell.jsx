@@ -267,13 +267,18 @@ const SimpleCombobox = ({
     }
   };
 
-  const filterStr = (value || "").toLowerCase();
-  const filtered = (options || []).filter(
-    (o) => !filterStr || o.toLowerCase().includes(filterStr)
+  // Normalize options to {value, label} shape
+  const normalizedOpts = (options || []).map((o) =>
+    typeof o === "string" ? { value: o, label: o } : o
   );
 
-  const handleSelect = (val) => {
-    onChange(val);
+  const filterStr = (value || "").toLowerCase();
+  const filtered = normalizedOpts.filter(
+    (o) => !filterStr || o.label.toLowerCase().includes(filterStr) || o.value.toLowerCase().includes(filterStr)
+  );
+
+  const handleSelect = (opt) => {
+    onChange(opt.value);
     setOpen(false);
   };
 
@@ -329,7 +334,7 @@ const SimpleCombobox = ({
                   i === highlightIdx ? "bg-gray-200" : "hover:bg-gray-50"
                 }`}
               >
-                {opt}
+                {opt.label}
               </div>
             ))}
           </div>,
