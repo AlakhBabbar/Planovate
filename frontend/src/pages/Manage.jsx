@@ -4,6 +4,7 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { timetableService, settingsService, curriculumService, scheduleService, courseService } from "../api";
 import { backupCompleteDatabase, getBackupSummary, restoreFromBackup } from "../utils/databaseBackup";
+import { semesterThenAlpha } from "../utils/sortHelpers";
 import CurriculumFilling from "./CurriculumFilling";
 
 
@@ -53,7 +54,8 @@ const Manage = () => {
       setLoading(true);
       setError(null);
       const data = await timetableService.listTimetables();
-      setTimetables(data);
+      const sorted = [...(data || [])].sort(semesterThenAlpha);
+      setTimetables(sorted);
       
       // Initialize update fields
       const initialFields = {};

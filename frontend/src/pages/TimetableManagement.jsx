@@ -377,6 +377,19 @@ const Timetable = () => {
           ["mon", "tue", "wed", "thu", "fri", "sat"],
           loadedTimeSlots
         );
+      } else {
+        // No existing timetable found — clear stale grid data from previous timetable
+        setBatches(prev => ({ ...prev, [activeTable]: {} }));
+        setBatchData(prev => ({ ...prev, [activeTable]: {} }));
+        setTempCells(new Set());
+        setHasUnsavedFromTemp(false);
+        setTabMetadata(prev => ({
+          ...prev,
+          [activeTable]: { ...prev[activeTable], timetableId: '' }
+        }));
+        wsCloseTimetable();
+        // Mark as loaded so we don't re-fetch
+        loadedMetadataRef.current[metaKey] = true;
       }
       
       setIsLoadingExisting(false);
@@ -1315,18 +1328,18 @@ const Timetable = () => {
             onCellBlur={wsCellBlur}
             highlightCell={highlightCell}
           />
-          {/* WS not-ready overlay — locks grid until backend connection is established */}
-          {isMetadataComplete && !wsReady && !wsReadyOverride && (
+          {/* WS not-ready overlay — only show when a timetable is loaded but backend hasn't acked yet */}
+          {isMetadataComplete && tabMetadata[activeTable]?.timetableId && !wsReady && !wsReadyOverride && (
             <div className="absolute inset-0 bg-white/85 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-lg z-10">
               <div className="flex flex-col items-center gap-3 text-center">
                 <Loader2 size={28} className="animate-spin text-purple-500" />
                 <p className="text-sm font-semibold text-gray-700">
-                  {wsStatus === 'connecting' || wsStatus === 'disconnected'
+                  {wsStatus === 'disconnected' || wsStatus === 'error'
                     ? 'Reconnecting to compute engine…'
                     : 'Connecting to compute engine…'}
                 </p>
                 <p className="text-xs text-gray-400 max-w-xs">
-                  Editing is disabled until the backend validation service is ready.
+                  Waiting for backend validation service.
                 </p>
                 <button
                   onClick={() => setWsReadyOverride(true)}

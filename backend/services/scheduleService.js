@@ -48,15 +48,21 @@ export function watchSchedulesByTimetableId(timetableId, onData, onError) {
 
 /**
  * Poll ALL schedules except a given timetableId.
+ * If activeTimetableIds is provided, only include schedules from those timetables.
  * Returns a stop() function to cancel.
  */
-export function watchAllOtherSchedules(excludeTimetableId, onData, onError) {
+export function watchAllOtherSchedules(excludeTimetableId, onData, onError, activeTimetableIds = null) {
   let stopped = false;
 
   async function poll() {
     if (stopped) return;
     try {
-      const all = await Schedule.find({ timetableId: { $ne: String(excludeTimetableId) } }).lean();
+      const filter = { timetableId: { $ne: String(excludeTimetableId) } };
+      // If active timetable IDs are provided, restrict to only those
+      if (activeTimetableIds && activeTimetableIds.length > 0) {
+        filter.timetableId = { $ne: String(excludeTimetableId), $in: activeTimetableIds };
+      }
+      const all = await Schedule.find(filter).lean();
       onData(all);
     } catch (err) {
       console.error('[scheduleService] poll error (others):', err);

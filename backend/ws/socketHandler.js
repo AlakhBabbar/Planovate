@@ -24,6 +24,29 @@ import { computeSuggestionGrid } from '../engine/computeEngine.js';
 import { getNeighborSuggestions } from '../engine/suggestionBuilder.js';
 import { checkCellConflicts } from '../engine/conflictEngine.js';
 import { upsertConflicts, resolveConflictsForCell, loadConflictsForTimetable } from '../services/conflictService.js';
+import Setting from '../models/Setting.js';
+import Timetable from '../models/Timetable.js';
+
+/**
+ * Resolve which timetable IDs belong to active semesters.
+ * Returns null if no setting exists OR no timetables match (= no filtering).
+ */
+async function getActiveTimetableIds() {
+  try {
+    const setting = await Setting.findOne({ _docId: 'activeSemesters' }).lean();
+    if (!setting?.list?.active || setting.list.active.length === 0) return null;
+
+    const activeSems = setting.list.active.map(String);
+    const timetables = await Timetable.find({ semester: { $in: activeSems } }, { unid: 1 }).lean();
+    const ids = timetables.map(t => t.unid).filter(Boolean);
+    console.log(`[semester-filter] active semesters: [${activeSems}] → ${ids.length} timetable(s)`);
+    // If no timetables found for active semesters, fall back to no filtering
+    return ids.length > 0 ? ids : null;
+  } catch (err) {
+    console.warn('[semester-filter] error loading active semesters:', err.message);
+    return null;
+  }
+}
 
 const DWELL_MS = 2500; // ms user must stay on cell before suggestions fire
 
@@ -43,6 +66,7 @@ function createClientState() {
     allTeachers: [],
     allRooms: [],
     curriculum: null,
+    activeTimetableIds: null, // null = no filter, [] = filter active
     // Pre-computed grid
     suggestionGrid: null,
     days: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
@@ -204,13 +228,16 @@ async function handleOpenTimetable(ws, state, payload) {
   state.timeSlots = timeSlots || [];
 
   try {
-    // Fetch all static data in parallel
-    const [courses, teachers, rooms, curriculums] = await Promise.all([
+    // Fetch all static data + active semester config in parallel
+    const [courses, teachers, rooms, curriculums, activeTtIds] = await Promise.all([
       getAllCourses(),
       getAllTeachers(),
       getAllRooms(),
       getAllCurriculums(),
+      getActiveTimetableIds(),
     ]);
+
+    state.activeTimetableIds = activeTtIds;
 
     state.allCourses  = courses;
     state.allTeachers = teachers;
@@ -248,14 +275,15 @@ async function handleOpenTimetable(ws, state, payload) {
       (err) => send(ws, { type: 'error', message: err.message })
     );
 
-    // Start polling other timetable schedules (for teacher/room conflict detection)
+    // Start polling other timetable schedules — filtered by active semesters
     state.stopOthers = watchAllOtherSchedules(
       timetableId,
       (schedules) => {
         state.otherSchedules = schedules;
         scheduleRecompute(ws, state);
       },
-      (err) => send(ws, { type: 'error', message: err.message })
+      (err) => send(ws, { type: 'error', message: err.message }),
+      state.activeTimetableIds
     );
 
     send(ws, { type: 'open_timetable_ack', timetableId });
@@ -338,6 +366,7 @@ async function handleCheckCell(ws, state, payload) {
       batchIndex,
       teacherId:  teacherId || null,
       roomId:     roomId    || null,
+      activeTimetableIds: state.activeTimetableIds,
     });
 
     // Enrich each conflict descriptor with display names

@@ -39,6 +39,7 @@ export async function checkCellConflicts({
   batchIndex,
   teacherId,
   roomId,
+  activeTimetableIds = null,
 }) {
   if (!teacherId && !roomId) return [];
   if (!day || !time)         return [];
@@ -47,16 +48,21 @@ export async function checkCellConflicts({
   const normTime = norm(time);
   const timeRegex = normTime.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+  // Build base filter for day/time
+  const baseFilter = {
+    day:  { $regex: new RegExp(`^${normDay}$`, 'i') },
+    time: { $regex: new RegExp(timeRegex, 'i') },
+  };
+
+  // If activeTimetableIds provided, restrict to only those timetables
+  if (activeTimetableIds && activeTimetableIds.length > 0) {
+    baseFilter.timetableId = { $in: activeTimetableIds };
+  }
+
   // Fetch all permanent + temp schedules at this day/time
   const [schedules, temps] = await Promise.all([
-    Schedule.find({
-      day:  { $regex: new RegExp(`^${normDay}$`, 'i') },
-      time: { $regex: new RegExp(timeRegex, 'i') },
-    }).lean(),
-    TempSchedule.find({
-      day:  { $regex: new RegExp(`^${normDay}$`, 'i') },
-      time: { $regex: new RegExp(timeRegex, 'i') },
-    }).lean(),
+    Schedule.find(baseFilter).lean(),
+    TempSchedule.find(baseFilter).lean(),
   ]);
 
   // Map: dedup key → ConflictDescriptor
@@ -67,9 +73,6 @@ export async function checkCellConflicts({
     const conflictingTimetableId = s.timetableId;
 
     // Key: only on type + entity + conflicting timetable.
-    // Position of the conflicting entry is irrelevant — same teacher/room
-    // booked in the same foreign timetable at the same day/time is ONE conflict,
-    // regardless of how rowIndex/colIndex are stored across Schedule vs TempSchedule.
     const key = `${type}|${norm(entityId)}|${conflictingTimetableId}`;
 
     const existing = deduped.get(key);
@@ -80,9 +83,9 @@ export async function checkCellConflicts({
       type,
       conflictingId:           String(entityId),
       conflictingTimetableId,
-      conflictScheduleId:      String(s._id || ''),  // MongoDB _id of conflicting doc
-      conflictScheduleType:    source,                // 'schedule' | 'temp'
-      timetableId,           // caller's timetable (the one being edited)
+      conflictScheduleId:      String(s._id || ''),
+      conflictScheduleType:    source,
+      timetableId,
       day:       s.day,
       time:      s.time,
       rowIndex:  s.rowIndex  ?? 0,
@@ -94,9 +97,7 @@ export async function checkCellConflicts({
 
   function scan(entries, source) {
     for (const s of entries) {
-      // Skip ALL entries from the same timetable — conflicts are only
-      // between DIFFERENT timetables. Same-timetable overlaps are handled
-      // by frontend validation, not the conflict engine.
+      // Skip entries from the same timetable
       if (s.timetableId === timetableId) continue;
 
       if (teacherId && s.teacherId && norm(s.teacherId) === norm(teacherId)) {

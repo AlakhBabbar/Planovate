@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { courseService, roomService, teacherService, timetableService } from "../api";
+import { semesterThenAlpha } from "../utils/sortHelpers";
 
 /**
  * Zustand Store for Timetable Global State
@@ -107,8 +108,9 @@ const useTimetableStore = create((set, get) => ({
     
     try {
       const timetables = await timetableService.listTimetables();
+      const sorted = [...(timetables || [])].sort(semesterThenAlpha);
       set({
-        allTimetables: timetables || [],
+        allTimetables: sorted,
         isTimetablesLoaded: true,
         isLoadingTimetables: false,
       });

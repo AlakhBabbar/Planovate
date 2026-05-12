@@ -6,6 +6,7 @@ import ClassOccupancyPreviewModal from "../components/ClassOccupancyPreviewModal
 import { timetableService } from "../api";
 import { getAllSchedules } from "../api/schedules";
 import { DEFAULT_TIME_SLOTS } from "../utils/timetableUIHelpers";
+import { semesterThenAlpha } from "../utils/sortHelpers";
 import { getCourseDisplayName, getRoomDisplayName, getTeacherDisplayName } from "../utils/idDisplayHelpers";
 import { exportClassOccupancyToPdf, exportClassOccupancyToExcel, exportClassOccupancyToPdfMobile, exportClassOccupancyToExcelMobile } from "../utils/classOccupancyExport";
 
@@ -155,7 +156,7 @@ const ClassOccupancy = () => {
         }
       });
 
-      const classesArray = Array.from(classesMap.values());
+      const classesArray = Array.from(classesMap.values()).sort(semesterThenAlpha);
       setClasses(classesArray);
 
       // Extract unique branches and semesters

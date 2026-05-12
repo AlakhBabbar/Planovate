@@ -3,6 +3,7 @@ import { Plus, X, List, Grid, Save, Trash2, Search, BookOpen, Users } from "luci
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { courseService, teacherService, curriculumService } from "../api";
+import { semesterThenAlpha } from "../utils/sortHelpers";
 
 
 const Curriculum = () => {
@@ -242,7 +243,7 @@ const Curriculum = () => {
       curr.semester?.toLowerCase().includes(search) ||
       curr.type?.toLowerCase().includes(search)
     );
-  });
+  }).sort(semesterThenAlpha);
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
